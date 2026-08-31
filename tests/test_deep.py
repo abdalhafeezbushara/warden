@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import deep
-from warden.recorder import Recorder, read_log
+from driftward import deep
+from driftward.recorder import Recorder, read_log
 
 
 def proc(pid, ppid=None, path="/bin/zsh", pidver=1):
@@ -149,7 +149,7 @@ class SubtreeCorrelation(unittest.TestCase):
 
 class DeepRecorderIntegration(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="warden-deep-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="driftward-deep-"))
         self.log = self.tmp / "s.log"
 
     def tearDown(self):
@@ -194,7 +194,7 @@ class DeepStreamBuffering(unittest.TestCase):
     buffered, then replayed once attach() seeds the subtree tracker."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="warden-stream-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="driftward-stream-"))
         self.log = self.tmp / "s.log"
 
     def tearDown(self):

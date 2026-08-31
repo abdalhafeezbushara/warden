@@ -14,13 +14,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import behavior, mcp, mcp_broker
-from warden.policy import DEFAULT_SECRET_DENY
+from driftward import behavior, mcp, mcp_broker
+from driftward.policy import DEFAULT_SECRET_DENY
 
 
 class McpDiscovery(unittest.TestCase):
     def setUp(self):
-        self.d = Path(tempfile.mkdtemp(prefix="warden-mcp-"))
+        self.d = Path(tempfile.mkdtemp(prefix="driftward-mcp-"))
         self.cfg = self.d / ".mcp.json"
         self.cfg.write_text(json.dumps({"mcpServers": {
             "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
@@ -44,7 +44,7 @@ class McpDiscovery(unittest.TestCase):
 
     def test_remote_endpoints_are_reported_for_allowlisting(self):
         # Remote servers can't be sandboxed, but their declared host must be
-        # discoverable so the agent can reach (and Warden can record) it.
+        # discoverable so the agent can reach (and Driftward can record) it.
         remotes = mcp.remote_endpoints([self.cfg])
         self.assertIn("example.com", {r["host"] for r in remotes})
         self.assertTrue(any(r["name"] == "remote-thing" for r in remotes))
@@ -66,14 +66,14 @@ class McpDiscovery(unittest.TestCase):
         # Both the stdio server AND the remote server are now wrapped.
         self.assertEqual(changed, ["github", "remote-thing"])
         spec = wrapped["mcpServers"]["github"]
-        self.assertEqual(spec["command"], "warden")
+        self.assertEqual(spec["command"], "driftward")
         self.assertEqual(spec["args"][:3], ["mcp", "shim", "github"])
         self.assertIn("--definition", spec["args"])
-        self.assertNotIn("--subject", spec["args"])  # never a nested Warden run
+        self.assertNotIn("--subject", spec["args"])  # never a nested Driftward run
         # The remote server becomes a stdio shim carrying its URL; the raw url key
         # is gone so it presents as a local process to the agent.
         remote = wrapped["mcpServers"]["remote-thing"]
-        self.assertEqual(remote["command"], "warden")
+        self.assertEqual(remote["command"], "driftward")
         self.assertIn("--url", remote["args"])
         self.assertNotIn("url", remote)
 
@@ -103,7 +103,7 @@ class McpDiscovery(unittest.TestCase):
     def test_wrap_command_contains_exact_definition_and_source(self):
         server = mcp.find("github", [self.cfg])
         command = mcp.wrap_command(server, self.cfg)
-        self.assertEqual(command[:4], ["warden", "mcp", "shim", "github"])
+        self.assertEqual(command[:4], ["driftward", "mcp", "shim", "github"])
         self.assertEqual(command[command.index("--config") + 1], str(self.cfg.resolve()))
         self.assertEqual(command[command.index("--definition") + 1], server.definition_sha256)
         self.assertEqual(command[command.index("--") + 1:], server.launch_command())
@@ -125,9 +125,9 @@ class McpDiscovery(unittest.TestCase):
 
 class McpBrokerBridge(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="warden-mcp-broker-"))
-        self.old_home = os.environ.get("WARDEN_HOME")
-        os.environ["WARDEN_HOME"] = str(self.root / "warden-home")
+        self.root = Path(tempfile.mkdtemp(prefix="driftward-mcp-broker-"))
+        self.old_home = os.environ.get("DRIFTWARD_HOME")
+        os.environ["DRIFTWARD_HOME"] = str(self.root / "driftward-home")
         self.source = self.root / ".mcp.json"
         self.server = mcp.McpServer(
             name="echo", command="/bin/cat", env={"PRIVATE_VALUE": "never-on-command-line"},
@@ -141,9 +141,9 @@ class McpBrokerBridge(unittest.TestCase):
     def tearDown(self):
         self.broker.close()
         if self.old_home is None:
-            os.environ.pop("WARDEN_HOME", None)
+            os.environ.pop("DRIFTWARD_HOME", None)
         else:
-            os.environ["WARDEN_HOME"] = self.old_home
+            os.environ["DRIFTWARD_HOME"] = self.old_home
         shutil.rmtree(self.root, ignore_errors=True)
 
     def _shim(self, token: str, definition: str | None = None):
@@ -151,7 +151,7 @@ class McpBrokerBridge(unittest.TestCase):
         env[mcp_broker.BROKER_ENV] = self.broker.address
         env[mcp_broker.TOKEN_ENV] = token
         code = (
-            "from warden.mcp_broker import run_shim; "
+            "from driftward.mcp_broker import run_shim; "
             f"raise SystemExit(run_shim('echo', {str(self.source)!r}, "
             f"{(definition or self.server.definition_sha256)!r}))"
         )
@@ -162,7 +162,7 @@ class McpBrokerBridge(unittest.TestCase):
         result = self._shim(self.broker.token)
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertEqual(result.stdout, b"hello broker\n")
-        grants = list((Path(os.environ["WARDEN_HOME"]) / "mcp-grants").glob("*.json"))
+        grants = list((Path(os.environ["DRIFTWARD_HOME"]) / "mcp-grants").glob("*.json"))
         self.assertEqual(grants, [])
 
     def test_broker_rejects_bad_token_and_unregistered_definition(self):
@@ -177,7 +177,7 @@ class McpBrokerBridge(unittest.TestCase):
         # The inner launcher must never treat an arbitrary path as a grant, or the
         # agent could point it at any file it can name. It fails closed (exit 2).
         import io, contextlib
-        from warden.cli import main
+        from driftward.cli import main
         outside = self.root / "evil-grant.json"
         outside.write_text("{}", encoding="utf-8")
         err = io.StringIO()
@@ -188,8 +188,8 @@ class McpBrokerBridge(unittest.TestCase):
 
     def test_serve_rejects_a_world_readable_grant(self):
         import io, contextlib
-        from warden.cli import main
-        grants = Path(os.environ["WARDEN_HOME"]) / "mcp-grants"
+        from driftward.cli import main
+        grants = Path(os.environ["DRIFTWARD_HOME"]) / "mcp-grants"
         grants.mkdir(parents=True, exist_ok=True)
         loose = grants / "loose.json"
         loose.write_text("{}", encoding="utf-8")
@@ -203,26 +203,26 @@ class McpBrokerBridge(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists(),
                      "requires macOS Seatbelt")
-@unittest.skipIf(os.environ.get("GITHUB_ACTIONS") or os.environ.get("WARDEN_SKIP_SANDBOX_E2E"),
+@unittest.skipIf(os.environ.get("GITHUB_ACTIONS") or os.environ.get("DRIFTWARD_SKIP_SANDBOX_E2E"),
                  "full agent→loopback-broker→inner-sandbox chain is unreliable on hosted macOS "
                  "CI runners (VM/TCC restrictions); runs on real Macs. The broker's auth, "
                  "registration, and stdio bridging are covered on CI by McpBrokerBridge.")
 class McpParentRunIntegration(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="warden-mcp-parent-"))
-        self.old_home = os.environ.get("WARDEN_HOME")
-        os.environ["WARDEN_HOME"] = str(self.root / "warden-home")
+        self.root = Path(tempfile.mkdtemp(prefix="driftward-mcp-parent-"))
+        self.old_home = os.environ.get("DRIFTWARD_HOME")
+        os.environ["DRIFTWARD_HOME"] = str(self.root / "driftward-home")
 
     def tearDown(self):
         if self.old_home is None:
-            os.environ.pop("WARDEN_HOME", None)
+            os.environ.pop("DRIFTWARD_HOME", None)
         else:
-            os.environ["WARDEN_HOME"] = self.old_home
+            os.environ["DRIFTWARD_HOME"] = self.old_home
         shutil.rmtree(self.root, ignore_errors=True)
 
     def test_outer_sandbox_launches_separate_mcp_session_with_config_env(self):
-        from warden import runner, sessions
-        from warden.policy import default_policy
+        from driftward import runner, sessions
+        from driftward.policy import default_policy
 
         cfg = self.root / "custom-mcp.json"
         server_code = (
@@ -259,11 +259,11 @@ class McpParentRunIntegration(unittest.TestCase):
 
 class McpBehavioralSubject(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-mcp-home-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-mcp-home-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def _summary(self, subject, host):
@@ -312,7 +312,7 @@ class McpRemoteBridge(unittest.TestCase):
             self.assertIn(secret, pol.filesystem.deny)
 
     def test_sse_messages_parses_data_events_and_joins_multiline(self):
-        from warden import mcp_remote
+        from driftward import mcp_remote
         stream = [b"event: message\n", b"data: {\"a\":1}\n", b"\n",
                   b": comment\n", b"data: line1\n", b"data: line2\n", b"\n"]
         self.assertEqual(list(mcp_remote._sse_messages(iter(stream))),
@@ -335,17 +335,20 @@ class McpRemoteBridge(unittest.TestCase):
                     self.send_response(202); self.end_headers(); return
                 if msg.get("method") == "initialize":
                     body = _json.dumps({"jsonrpc": "2.0", "id": rid,
-                                        "result": {"serverInfo": {"name": "mock"}}}).encode()
+                                        "result": {"serverInfo": {"name": "mock"},
+                                                   "protocolVersion": "2025-06-18"}}).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Mcp-Session-Id", "S1")
                     self.send_header("Content-Length", str(len(body))); self.end_headers()
                     self.wfile.write(body); return
-                # a tool call answered over SSE, echoing whether the session came back
+                # a tool call answered over SSE, echoing the session AND the
+                # negotiated protocol version the client sent back.
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream"); self.end_headers()
                 result = _json.dumps({"jsonrpc": "2.0", "id": rid,
-                                      "result": {"session": self.headers.get("Mcp-Session-Id")}})
+                                      "result": {"session": self.headers.get("Mcp-Session-Id"),
+                                                 "proto": self.headers.get("MCP-Protocol-Version")}})
                 self.wfile.write(f"data: {result}\n\n".encode()); self.wfile.flush()
 
         srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -358,7 +361,7 @@ class McpRemoteBridge(unittest.TestCase):
             ]) + "\n"
             proc = _sp.run(
                 [sys.executable, "-c",
-                 f"import sys;from warden.mcp_remote import bridge;sys.exit(bridge('http://127.0.0.1:{port}/mcp'))"],
+                 f"import sys;from driftward.mcp_remote import bridge;sys.exit(bridge('http://127.0.0.1:{port}/mcp'))"],
                 input=requests.encode(), capture_output=True, timeout=30,
                 env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
             by_id = {}
@@ -368,6 +371,66 @@ class McpRemoteBridge(unittest.TestCase):
             self.assertEqual(by_id[1]["result"]["serverInfo"]["name"], "mock")
             # the session established at initialize was echoed on the later call
             self.assertEqual(by_id[2]["result"]["session"], "S1")
+            # the negotiated protocol version is echoed on post-init requests
+            self.assertEqual(by_id[2]["result"]["proto"], "2025-06-18")
+        finally:
+            srv.shutdown()
+
+    def test_bridge_recovers_from_an_expired_session_with_404(self):
+        import json as _json
+        import subprocess as _sp
+        import threading as _th
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        state = {"inits": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                msg = _json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                rid = msg.get("id")
+                if rid is None:
+                    self.send_response(202); self.end_headers(); return
+                if msg.get("method") == "initialize":
+                    state["inits"] += 1
+                    body = _json.dumps({"jsonrpc": "2.0", "id": rid, "result": {}}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Mcp-Session-Id", f"S{state['inits']}")
+                    self.send_header("Content-Length", str(len(body))); self.end_headers()
+                    self.wfile.write(body); return
+                # First tool call: pretend the session expired (404). After the
+                # bridge re-initializes (session S2), succeed.
+                if self.headers.get("Mcp-Session-Id") == "S1":
+                    self.send_response(404); self.end_headers(); return
+                body = _json.dumps({"jsonrpc": "2.0", "id": rid,
+                                    "result": {"ok": True, "session": self.headers.get("Mcp-Session-Id")}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body))); self.end_headers()
+                self.wfile.write(body)
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = srv.server_address[1]
+        _th.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            requests = "\n".join(_json.dumps(m) for m in [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {}},
+            ]) + "\n"
+            proc = _sp.run(
+                [sys.executable, "-c",
+                 f"import sys;from driftward.mcp_remote import bridge;sys.exit(bridge('http://127.0.0.1:{port}/mcp'))"],
+                input=requests.encode(), capture_output=True, timeout=30,
+                env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
+            by_id = {_json.loads(l)["id"]: _json.loads(l)
+                     for l in proc.stdout.decode().splitlines() if l.strip()}
+            # the tool call succeeded after a transparent re-initialize on S2
+            self.assertTrue(by_id[2]["result"]["ok"])
+            self.assertEqual(by_id[2]["result"]["session"], "S2")
+            self.assertEqual(state["inits"], 2)
         finally:
             srv.shutdown()
 
@@ -410,7 +473,7 @@ class McpRemoteBridge(unittest.TestCase):
         try:
             proc = _sp.run(
                 [sys.executable, "-c",
-                 f"import sys;from warden.mcp_remote import bridge;"
+                 f"import sys;from driftward.mcp_remote import bridge;"
                  f"sys.exit(bridge('http://127.0.0.1:{port}/sse', transport='sse'))"],
                 input=(_json.dumps({"jsonrpc": "2.0", "id": 7, "method": "initialize"}) + "\n").encode(),
                 capture_output=True, timeout=30,

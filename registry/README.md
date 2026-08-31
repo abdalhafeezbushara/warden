@@ -1,41 +1,48 @@
-# Warden community registry
+# Driftward community registry (template)
 
 A registry of **reviewed, Ed25519-signed behavior baselines** (and optional
 least-privilege policies) for popular MCP servers and skills. Adopt one and your
-Warden drift checks and CI gates run against a community-reviewed profile instead
+Driftward drift checks and CI gates run against a community-reviewed profile instead
 of one you had to build from scratch — but only after you decide to trust the
 signer.
 
-There is no network and no cloud. This directory *is* the registry: signed JSON
-files under [`entries/`](entries/). Clone it, vendor it, or receive it any way you
-like; Warden reads it locally.
+> **This is a starter template, not a production registry.** The entries under
+> [`examples/`](examples/) are **examples signed by a throwaway development key**
+> and are not version-pinned — do not trust them for real use. They exist to show
+> the format and the workflow. A production registry needs an independently
+> published maintainer key (see [TRUSTED_KEYS.md](TRUSTED_KEYS.md)) and
+> reproducibly reviewed, definition-pinned entries.
+
+There is no network and no cloud. A registry is just a directory of signed JSON
+files. Clone it, vendor it, or receive it any way you like; Driftward reads it
+locally.
 
 ## Use it
 
 ```bash
 # 1. Trust a reviewer key you have independently verified (see TRUSTED_KEYS.md)
-warden registry trust <publisher-key> --label warden-maintainers
+driftward registry trust <publisher-key> --label driftward-maintainers
 
 # 2. Check what the registry contains and that every entry verifies
-warden registry verify ./entries/
+driftward registry verify ./examples/
 
 # 3. Adopt a trusted entry as a local baseline (works in any project)
-warden registry install @modelcontextprotocol/server-github --from ./entries/
+driftward registry install @modelcontextprotocol/server-github --from ./examples/
 
 # optional: also write the entry's reviewed policy
-warden registry install @modelcontextprotocol/server-github --from ./entries/ \
+driftward registry install @modelcontextprotocol/server-github --from ./examples/ \
     --policy-out github.policy.json
 ```
 
 Trust is **deny-by-default**: an entry whose signer is not in your trust store is
 never installed. Adopting an entry re-signs a *local* baseline (with provenance
-recording the original signer), so it becomes a first-class baseline for `warden
-diff` and `warden gate`.
+recording the original signer), so it becomes a first-class baseline for `driftward
+diff` and `driftward gate`.
 
 ## Contribute
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short: observe a server under Warden,
-approve a baseline, `warden registry publish` it, and open a pull request. A
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: observe a server under Driftward,
+approve a baseline, `driftward registry publish` it, and open a pull request. A
 maintainer reviews the behavior and re-signs it with a maintainer key.
 
 ## Trust model

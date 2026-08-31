@@ -1,5 +1,5 @@
 name: agent:codex
-description: Warden baseline for OpenAI Codex CLI. OpenAI's terminal coding agent.
+description: Driftward baseline for OpenAI Codex CLI. OpenAI's terminal coding agent.
 
 filesystem:
   read:

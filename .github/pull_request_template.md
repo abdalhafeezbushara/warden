@@ -9,4 +9,4 @@ Brief description.
 - [ ] Tests added/updated. For an enforcement change, a test shows the dangerous
       action blocked and the safe action still working.
 - [ ] `python3 -m unittest discover -s tests` passes.
-- [ ] `warden doctor` still passes on macOS.
+- [ ] `driftward doctor` still passes on macOS.

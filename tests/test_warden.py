@@ -1,4 +1,4 @@
-"""Warden unit + integration tests. Stdlib unittest only.
+"""Driftward unit + integration tests. Stdlib unittest only.
 
 The integration tests shell out to `sandbox-exec` and are macOS-specific; they
 skip cleanly elsewhere. They assert the two claims that matter: a denied path is
@@ -19,10 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import policy as P
-from warden import seatbelt
-from warden.recorder import Recorder, verify_log
-from warden.proxy import host_matches
+from driftward import policy as P
+from driftward import seatbelt
+from driftward.recorder import Recorder, verify_log
+from driftward.proxy import host_matches
 
 
 class PolicyParsing(unittest.TestCase):
@@ -81,7 +81,7 @@ class HostMatching(unittest.TestCase):
 
 class Verdicts(unittest.TestCase):
     def _decision(self, allow, on_violation):
-        from warden.proxy import _Decision
+        from driftward.proxy import _Decision
         pol = P.Policy(name="t", network=P.NetworkRules(allow=allow, deny_all_other=True),
                        on_violation=on_violation)
         return _Decision(pol)
@@ -100,7 +100,7 @@ class Verdicts(unittest.TestCase):
         self.assertTrue(d.passes("warn"))  # traffic flows
 
     def test_explicit_deny_beats_allow(self):
-        from warden.proxy import _Decision
+        from driftward.proxy import _Decision
         pol = P.Policy(name="t", network=P.NetworkRules(
             allow=["example.com"], deny=["example.com"], deny_all_other=True))
         self.assertEqual(_Decision(pol).verdict("example.com"), "deny")
@@ -109,10 +109,10 @@ class Verdicts(unittest.TestCase):
 class Canonicalization(unittest.TestCase):
     def test_tmp_symlink_resolved(self):
         # /tmp is a symlink to /private/tmp on macOS; canonical() must resolve it.
-        real = seatbelt.canonical("/tmp/warden-x/**")
+        real = seatbelt.canonical("/tmp/driftward-x/**")
         if sys.platform == "darwin":
-            self.assertTrue(real.startswith("/private/tmp/warden-x"))
-        self.assertIn("warden-x", real)
+            self.assertTrue(real.startswith("/private/tmp/driftward-x"))
+        self.assertIn("driftward-x", real)
 
     def test_home_expansion(self):
         real = seatbelt.canonical("~/.ssh/**")
@@ -122,7 +122,7 @@ class Canonicalization(unittest.TestCase):
 
 class RecorderChain(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="warden-rec-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="driftward-rec-"))
         self.log = self.tmp / "s.log"
 
     def tearDown(self):
@@ -158,7 +158,7 @@ class RecorderChain(unittest.TestCase):
                      "requires macOS sandbox-exec")
 class SeatbeltEnforcement(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path("/private/tmp/warden-selftest")
+        self.tmp = Path("/private/tmp/driftward-selftest")
         (self.tmp / "secrets").mkdir(parents=True, exist_ok=True)
         self.secret = self.tmp / "secrets" / "k.txt"
         self.secret.write_text("TOPSECRET")
@@ -181,7 +181,7 @@ class SeatbeltEnforcement(unittest.TestCase):
         prof = seatbelt.compile_profile(pol, 0)
         # Baseline: readable without sandbox.
         self.assertEqual(self.secret.read_text(), "TOPSECRET")
-        # Under Warden: blocked.
+        # Under Driftward: blocked.
         res = self._run_under(prof, ["/bin/cat", str(self.secret)])
         self.assertNotEqual(res.returncode, 0)
         self.assertNotIn("TOPSECRET", res.stdout)

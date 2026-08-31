@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import intelligence as intel
+from driftward import intelligence as intel
 
 
 class HostClassification(unittest.TestCase):
@@ -101,11 +101,11 @@ class RiskScoring(unittest.TestCase):
 
 class Baselines(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-base-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-base-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def _s(self, agent, hosts):

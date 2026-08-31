@@ -3,7 +3,7 @@ __pycache__/
 build/
 dist/
 *.egg-info/
-.warden/
+.driftward/
 .venv/
 .DS_Store
 .idea/

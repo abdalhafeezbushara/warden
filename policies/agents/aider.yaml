@@ -1,5 +1,5 @@
 name: agent:aider
-description: Warden baseline for aider. Open-source pair-programming agent; provider depends on config.
+description: Driftward baseline for aider. Open-source pair-programming agent; provider depends on config.
 
 filesystem:
   read:

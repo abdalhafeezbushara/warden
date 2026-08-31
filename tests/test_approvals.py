@@ -9,9 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import approvals
-from warden.proxy import _Decision
-from warden.policy import Policy, NetworkRules
+from driftward import approvals
+from driftward.proxy import _Decision
+from driftward.policy import Policy, NetworkRules
 
 
 class DecisionCacheTests(unittest.TestCase):

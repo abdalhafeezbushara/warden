@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import agents
+from driftward import agents
 
 
 class AgentRegistry(unittest.TestCase):
@@ -46,14 +46,14 @@ class AgentRegistry(unittest.TestCase):
 
 class SessionsAndDashboard(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-home-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
-        # Import after setting WARDEN_HOME so sessions_dir points here.
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-home-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
+        # Import after setting DRIFTWARD_HOME so sessions_dir points here.
         import importlib
-        from warden import sessions as sess
+        from driftward import sessions as sess
         importlib.reload(sess)
         self.sess = sess
-        from warden.recorder import Recorder
+        from driftward.recorder import Recorder
         log = self.home / "sessions" / "20260101-000000.log"
         rec = Recorder(log)
         rec.start({"argv": ["sh", "x.sh"], "agent": "claude", "policy": "demo", "enforce": True})
@@ -65,7 +65,7 @@ class SessionsAndDashboard(unittest.TestCase):
         rec.seal({"exit_code": 0})
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         import shutil
         shutil.rmtree(self.home, ignore_errors=True)
 
@@ -90,7 +90,7 @@ class SessionsAndDashboard(unittest.TestCase):
         self.assertEqual(o["recent"][0]["status"], "completed")
 
     def test_dashboard_security_headers_and_host_guard(self):
-        from warden.dashserver import DashboardServer
+        from driftward.dashserver import DashboardServer
 
         server = DashboardServer()
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -110,7 +110,7 @@ class SessionsAndDashboard(unittest.TestCase):
 
             with urllib.request.urlopen(server.url + "api/session/20260101-000000") as response:
                 detail = json.load(response)
-                self.assertEqual(detail["behavior"]["schema"], "warden.behavior/v1")
+                self.assertEqual(detail["behavior"]["schema"], "driftward.behavior/v1")
                 self.assertIsNone(detail["behavior_diff"])
 
             spoofed = urllib.request.Request(server.url, headers={"Host": "attacker.example"})

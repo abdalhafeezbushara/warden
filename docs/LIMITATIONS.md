@@ -1,18 +1,18 @@
 # Limitations & roadmap
 
-Warden is honest about what is enforced vs. recorded, and what is not yet built.
+Driftward is honest about what is enforced vs. recorded, and what is not yet built.
 Overselling is the fastest way to lose the trust the tool exists to create.
 
 ## What works today (macOS, tested)
 
 - **Filesystem enforcement** — denied paths (credentials, `.env`, keychains) are
-  unreadable/unwritable under `warden run`, enforced by macOS Seatbelt.
+  unreadable/unwritable under `driftward run`, enforced by macOS Seatbelt.
 - **Process enforcement** — denied binaries (`ssh`, `aws`, …) cannot be exec'd.
 - **Network recording + enforcement** — every egress host is recorded; unlisted
   hosts are blocked (default-deny). HTTPS is tunneled, not decrypted.
 - **Tamper-evident + signed receipts** — SHA-256 hash chain, sealed with an
-  Ed25519 signature (`warden verify` checks both; validated against RFC 8032).
-- **Skill profiling** — `warden profile` time-boxes a semi-trusted skill with
+  Ed25519 signature (`driftward verify` checks both; validated against RFC 8032).
+- **Skill profiling** — `driftward profile` time-boxes a semi-trusted skill with
   strict read/write confinement and blocked-by-default egress, then generates a
   least-privilege policy from observed attempts. Unknown code belongs in
   `detonate/`, the disposable container harness.
@@ -20,16 +20,16 @@ Overselling is the fastest way to lose the trust the tool exists to create.
   process, filesystem, IPC, and credential capabilities. Explicitly approved
   baselines are Ed25519-signed; diffs and CI gates reject unexplained additions.
 - **Multi-agent** — first-class baselines for claude, codex, cursor, copilot,
-  gemini, aider, q, opencode, goose; project `.warden.yaml` discovery.
-- **Per-MCP-server principals** — `warden mcp run <name>` runs each MCP server as
+  gemini, aider, q, opencode, goose; project `.driftward.yaml` discovery.
+- **Per-MCP-server principals** — `driftward mcp run <name>` runs each MCP server as
   its own confined identity (`mcp:<name>`) with its own signed baseline and
-  drift; `warden mcp wrap` routes an agent's whole MCP config through an
+  drift; `driftward mcp wrap` routes an agent's whole MCP config through an
   authenticated parent broker. The broker snapshots exact definitions before
   the agent starts, so it cannot become a general sandbox escape. Configured env
   values are preserved without being logged, package/argument changes alter the
   behavioral identity, and MCP filesystem reads/writes are strict by default.
   Stdio servers are fully confined. A **remote (`url`) server is confined too**:
-  a wrapped remote server (or `warden mcp run <name>`) runs a sandboxed stdio↔HTTP
+  a wrapped remote server (or `driftward mcp run <name>`) runs a sandboxed stdio↔HTTP
   bridge as the `mcp:<name>` principal with **egress locked to only its declared
   host**, so its traffic is recorded under its own identity and a rug-pulled URL
   is *blocked*, not merely logged. The bridge speaks both MCP remote transports —
@@ -37,13 +37,13 @@ Overselling is the fastest way to lose the trust the tool exists to create.
   the config). An *un*wrapped remote endpoint the agent calls
   directly is still allow-listed and recorded (not bridged), so it works under
   default-deny egress without silently reaching out.
-- **Signed community registry** — `warden registry` shares and adopts reviewed
+- **Signed community registry** — `driftward registry` shares and adopts reviewed
   behavior baselines for popular MCP servers/skills as Ed25519-signed, offline-
   verifiable JSON entries. Trust is deny-by-default: an entry is adopted only
-  after its signer is in your trust store (`warden registry trust <key>`), and
+  after its signer is in your trust store (`driftward registry trust <key>`), and
   adopting re-signs a local baseline (with provenance) so drift and CI gates run
   against the community profile — across any workspace. No network, no cloud.
-- **Self-test** — `warden doctor` performs a live enforcement test on the
+- **Self-test** — `driftward doctor` performs a live enforcement test on the
   machine, so you can confirm the guarantees hold here.
 - **Credential scoping** — named agents inherit only their registered provider
   variables; arbitrary commands get no provider credentials unless `env_allow`
@@ -54,14 +54,14 @@ Overselling is the fastest way to lose the trust the tool exists to create.
   exactly `~/Library/Keychains/**` and nothing else — `~/.ssh`, `~/.aws`,
   `.env`, `.git-credentials`, etc. stay denied, egress stays allow-listed, and
   the env stays scrubbed, so the agent is still far below its unsandboxed
-  privilege. The grant is printed at launch and shown in `warden report`. To keep
+  privilege. The grant is printed at launch and shown in `driftward report`. To keep
   the keychain sealed, authenticate with an API key (`CURSOR_API_KEY`) and pass
-  `warden run --deny-keychain`.
+  `driftward run --deny-keychain`.
 
 ## Known gaps (honest list)
 
 0. **Filesystem reads are allow-by-default *unless* you pass `--strict-read`.**
-   By default, reads are allowed except the credential deny-list and Warden's
+   By default, reads are allowed except the credential deny-list and Driftward's
    home (agent-compatibility default). Pass `--strict-read` (or `strict_read:
    true`) to confine reads to the `read` allow-list — the project, the agent's
    config/cache dirs, and system paths — denying the user's other data
@@ -74,7 +74,7 @@ Overselling is the fastest way to lose the trust the tool exists to create.
    specific agent under `--strict-read` and add what it needs. The default
    (non-strict) mode is the recommended posture for real-agent use.
 
-1. **Deep recording needs Full Disk Access (and sudo).** `warden run --deep`
+1. **Deep recording needs Full Disk Access (and sudo).** `driftward run --deep`
    captures comprehensive file/process activity via macOS `eslogger`, which
    requires the **terminal to have Full Disk Access** (a one-time System Settings
    grant — TCC will not let code grant it) and `sudo`. When those aren't present,
@@ -91,10 +91,10 @@ Overselling is the fastest way to lose the trust the tool exists to create.
    under-recorded on Linux until then.
 4. **Linux enforcement needs bubblewrap + user namespaces.** Where a hardened
    distro disables unprivileged userns (e.g. Ubuntu's AppArmor restriction),
-   bwrap fails. `warden run` now refuses to start the child; use
+   bwrap fails. `driftward run` now refuses to start the child; use
    `--allow-record-fallback` only when an explicit proxy-only fallback is
    acceptable.
-5. **No TLS interior.** Warden records *which host*, not payloads — a deliberate
+5. **No TLS interior.** Driftward records *which host*, not payloads — a deliberate
    no-MITM choice. Content DLP is out of scope for the OSS core.
 6. **Signing key is per-machine and local.** Good for local integrity and
    single-owner attribution; a shared-team trust root is future work.
@@ -120,7 +120,7 @@ Overselling is the fastest way to lose the trust the tool exists to create.
 11. **The MCP broker must know custom config paths before launch.** Project and
     standard Claude/Cursor/VS Code/Windsurf locations are discovered
     automatically. For any other wrapped config, pass repeatable
-    `warden run --mcp-config path/to/mcp.json ...`; an unregistered definition
+    `driftward run --mcp-config path/to/mcp.json ...`; an unregistered definition
     fails closed. MCP config backups retain the source file's permissions.
 
 ## Roadmap
@@ -130,6 +130,6 @@ Overselling is the fastest way to lose the trust the tool exists to create.
   Streamable HTTP and legacy HTTP+SSE request/response are confined today).
 - Grow the reviewed-baseline registry format into a curated public registry repo,
   and add policy entries alongside behavior baselines (the signing/trust/adopt
-  machinery ships today via `warden registry`).
+  machinery ships today via `driftward registry`).
 - Add team policy inheritance and shared organizational trust roots.
 - Add Windows enforcement and shared organizational trust roots.

@@ -4,11 +4,11 @@
 # long tail, not just the reputable top results) and write it to packages.txt.
 # Feed that list to BOTH tools:
 #   - static scan (safe on your Mac):   see below
-#   - dynamic detonation (in Docker):   detonate/warden-detonate.sh --file packages.txt
+#   - dynamic detonation (in Docker):   detonate/driftward-detonate.sh --file packages.txt
 #
 # Usage:
-#   ~/Desktop/warden/detonate/fetch-corpus.sh            # ~300 packages -> ./packages.txt
-#   N=600 ~/Desktop/warden/detonate/fetch-corpus.sh out.txt
+#   ~/Desktop/driftward/detonate/fetch-corpus.sh            # ~300 packages -> ./packages.txt
+#   N=600 ~/Desktop/driftward/detonate/fetch-corpus.sh out.txt
 
 set -uo pipefail
 OUT="${1:-packages.txt}"

@@ -18,13 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 class BehavioralIntegrity(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-behavior-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
-        from warden import behavior
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-behavior-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
+        from driftward import behavior
         self.behavior = behavior
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def _summary(self, *, session="s1", hosts=("api.anthropic.com",), deep=(),
@@ -50,7 +50,7 @@ class BehavioralIntegrity(unittest.TestCase):
             ),
         )
         manifest = self.behavior.build_manifest(summary)
-        self.assertEqual(manifest["schema"], "warden.behavior/v1")
+        self.assertEqual(manifest["schema"], "driftward.behavior/v1")
         self.assertEqual(manifest["subject"]["key"], "claude")
         self.assertEqual(len(manifest["capabilities"]["network"]), 1)
         resources = {cap["resource"] for cap in manifest["capabilities"]["filesystem"]}
@@ -151,8 +151,8 @@ class BehavioralIntegrity(unittest.TestCase):
         self.assertFalse(result["session_integrity_ok"])
 
     def test_cli_gate_fails_on_new_approved_behavior(self):
-        from warden.cli import main
-        from warden.recorder import Recorder
+        from driftward.cli import main
+        from driftward.recorder import Recorder
 
         def record(sid, hosts):
             rec = Recorder(self.home / "sessions" / f"{sid}.log")

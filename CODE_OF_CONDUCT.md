@@ -2,7 +2,7 @@
 
 ## Our pledge
 
-We want Warden to be a welcoming, harassment-free project for everyone,
+We want Driftward to be a welcoming, harassment-free project for everyone,
 regardless of experience, background, or identity.
 
 ## Standards

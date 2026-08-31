@@ -2,7 +2,7 @@
 #
 # Skill:   example "fetch and summarize a URL" skill (illustrative).
 # Source:  https://example.com/skills/fetch  (placeholder)
-# Derived: `warden profile ./fetch-skill.sh` on 2026-08-30, then reviewed.
+# Derived: `driftward profile ./fetch-skill.sh` on 2026-08-30, then reviewed.
 # Review:  the skill needs to reach the public web to fetch pages and its
 #          model provider to summarize. It has no reason to read credentials or
 #          spawn shells, so those stay denied. The allow-list is intentionally

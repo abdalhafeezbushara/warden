@@ -1,5 +1,5 @@
 name: agent:opencode
-description: Warden baseline for opencode. Open-source terminal agent; provider-dependent.
+description: Driftward baseline for opencode. Open-source terminal agent; provider-dependent.
 
 filesystem:
   read:

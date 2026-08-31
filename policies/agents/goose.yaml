@@ -1,5 +1,5 @@
 name: agent:goose
-description: Warden baseline for Goose. Block's open-source agent; provider-dependent.
+description: Driftward baseline for Goose. Block's open-source agent; provider-dependent.
 
 filesystem:
   read:

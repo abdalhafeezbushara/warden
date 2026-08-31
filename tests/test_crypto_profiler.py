@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import crypto, policy as P, profiler
+from driftward import crypto, policy as P, profiler
 
 
 class Ed25519Vectors(unittest.TestCase):
@@ -47,11 +47,11 @@ class Ed25519Vectors(unittest.TestCase):
 
 class KeyManagement(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-key-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-key-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def test_key_is_stable_and_private(self):

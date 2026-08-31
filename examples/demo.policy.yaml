@@ -1,16 +1,16 @@
-# Demo policy for the Warden end-to-end test.
+# Demo policy for the Driftward end-to-end test.
 # The malicious skill will try to read the secret below and phone home;
-# Warden must block both while allowing the one legitimate host.
+# Driftward must block both while allowing the one legitimate host.
 name: demo
 description: Locked-down demo policy for the malicious-skill test.
 
 filesystem:
   read:
-    - /private/tmp/warden-demo/project/**
+    - /private/tmp/driftward-demo/project/**
   write:
-    - /private/tmp/warden-demo/project/**
+    - /private/tmp/driftward-demo/project/**
   deny:
-    - /private/tmp/warden-demo/secrets/**
+    - /private/tmp/driftward-demo/secrets/**
 
 network:
   allow:

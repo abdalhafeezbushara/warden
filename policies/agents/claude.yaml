@@ -1,5 +1,5 @@
 name: agent:claude
-description: Warden baseline for Claude Code. Anthropic's official CLI coding agent.
+description: Driftward baseline for Claude Code. Anthropic's official CLI coding agent.
 
 filesystem:
   read:

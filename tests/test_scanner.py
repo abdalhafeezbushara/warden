@@ -12,12 +12,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import scanner, scan_report
+from driftward import scanner, scan_report
 
 
 class StaticAnalysis(unittest.TestCase):
     def setUp(self):
-        self.d = Path(tempfile.mkdtemp(prefix="warden-scan-"))
+        self.d = Path(tempfile.mkdtemp(prefix="driftward-scan-"))
 
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
@@ -70,7 +70,7 @@ class StaticAnalysis(unittest.TestCase):
 
 class CorpusLoading(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="warden-corpus-"))
+        self.root = Path(tempfile.mkdtemp(prefix="driftward-corpus-"))
         s = self.root / "skill-a"
         s.mkdir()
         (s / "scan.json").write_text(json.dumps(
@@ -92,7 +92,7 @@ class CorpusLoading(unittest.TestCase):
 
 class DynamicContainment(unittest.TestCase):
     def test_unavailable_enforcement_is_not_counted_as_detonated(self):
-        root = Path(tempfile.mkdtemp(prefix="warden-scan-unavailable-"))
+        root = Path(tempfile.mkdtemp(prefix="driftward-scan-unavailable-"))
         target = scanner.Target("sample", root, ["sh", "run.sh"], [])
         summary = {
             "degraded": True,
@@ -101,8 +101,8 @@ class DynamicContainment(unittest.TestCase):
             "risk": {"score": 35, "level": "medium", "reasons": []},
         }
         try:
-            with mock.patch("warden.runner.run", return_value=125), \
-                    mock.patch("warden.sessions.summarize", return_value=summary):
+            with mock.patch("driftward.runner.run", return_value=125), \
+                    mock.patch("driftward.sessions.summarize", return_value=summary):
                 result = scanner.scan_target(target)
             self.assertFalse(result["detonated"])
             self.assertIn("not executed", result["error"])

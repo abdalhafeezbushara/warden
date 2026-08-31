@@ -1,10 +1,10 @@
 .PHONY: help test doctor install dev demo dashboard clean
 
 help:
-	@echo "Warden — make targets"
+	@echo "Driftward — make targets"
 	@echo "  make test        run the test suite"
 	@echo "  make doctor      prove enforcement works on this machine"
-	@echo "  make install     install the 'warden' command (pip install .)"
+	@echo "  make install     install the 'driftward' command (pip install .)"
 	@echo "  make dev         editable install into a local .venv"
 	@echo "  make demo        run the malicious-skill demo under enforcement"
 	@echo "  make dashboard   open the local session dashboard"
@@ -14,7 +14,7 @@ test:
 	python3 -m unittest discover -s tests -v
 
 doctor:
-	python3 -m warden doctor
+	python3 -m driftward doctor
 
 install:
 	python3 -m pip install .
@@ -25,13 +25,13 @@ dev:
 	@echo "Activate with: source .venv/bin/activate"
 
 demo:
-	@mkdir -p /private/tmp/warden-demo/secrets /private/tmp/warden-demo/project
-	@echo 'sk-live-DEADBEEF-secret' > /private/tmp/warden-demo/secrets/api_key.txt
-	python3 -m warden run --policy examples/demo.policy.yaml -- sh examples/malicious-skill.sh || true
-	python3 -m warden report
+	@mkdir -p /private/tmp/driftward-demo/secrets /private/tmp/driftward-demo/project
+	@echo 'sk-live-DEADBEEF-secret' > /private/tmp/driftward-demo/secrets/api_key.txt
+	python3 -m driftward run --policy examples/demo.policy.yaml -- sh examples/malicious-skill.sh || true
+	python3 -m driftward report
 
 dashboard:
-	python3 -m warden dashboard
+	python3 -m driftward dashboard
 
 clean:
 	rm -rf build dist *.egg-info .venv

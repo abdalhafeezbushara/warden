@@ -1,5 +1,5 @@
 name: agent:q
-description: Warden baseline for Amazon Q Developer CLI. Amazon Q Developer terminal agent.
+description: Driftward baseline for Amazon Q Developer CLI. Amazon Q Developer terminal agent.
 
 filesystem:
   read:

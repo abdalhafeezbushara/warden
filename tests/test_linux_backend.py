@@ -2,7 +2,7 @@
 
 These verify the generated bwrap invocation encodes the policy correctly. They
 run on any OS (pure string generation); live bwrap enforcement is exercised by
-CI on Linux and by `warden doctor` there.
+CI on Linux and by `driftward doctor` there.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import linux
-from warden.policy import Policy, FilesystemRules, NetworkRules, ProcessRules
+from driftward import linux
+from driftward.policy import Policy, FilesystemRules, NetworkRules, ProcessRules
 
 
 def _cmd(**kw):

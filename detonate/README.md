@@ -4,13 +4,13 @@ Runs untrusted MCP servers **for real** to see where they phone home — safely,
 because each one executes inside a disposable Docker container, unprivileged,
 with no host mounts, and the container is destroyed after.
 
-This is the counterpart to `warden scan --static-only`: static analysis reads a
+This is the counterpart to `driftward scan --static-only`: static analysis reads a
 skill's code without running it; detonation *runs* it and watches the network.
 Egress is captured two ways so nothing slips past:
 
 - **DNS capture** (tcpdump at the container boundary) — app-agnostic, so it sees
   hosts even when the server ignores `HTTP_PROXY` (Node's `fetch` does).
-- **Warden's proxy** — verdicts for proxy-honoring clients (curl, Python).
+- **Driftward's proxy** — verdicts for proxy-honoring clients (curl, Python).
 
 Capture covers the **whole container lifetime**, so a package that beacons from
 an `npm postinstall` script — where real supply-chain attacks fire — is caught,
@@ -19,16 +19,16 @@ not just runtime behavior. npm/node's own infrastructure is filtered out.
 ## One-time setup
 
 ```bash
-cd ~/Desktop/warden
-docker build -f detonate/Dockerfile -t warden-detonate .
+cd ~/Desktop/driftward
+docker build -f detonate/Dockerfile -t driftward-detonate .
 ```
 
 ## Run
 
 ```bash
-~/Desktop/warden/detonate/warden-detonate.sh @upstash/context7-mcp mcp-server-kubernetes
+~/Desktop/driftward/detonate/driftward-detonate.sh @upstash/context7-mcp mcp-server-kubernetes
 # or a list, one npm package per line:
-~/Desktop/warden/detonate/warden-detonate.sh --file packages.txt
+~/Desktop/driftward/detonate/driftward-detonate.sh --file packages.txt
 ```
 
 Writes `finding.html` + `results.jsonl` to a timestamped folder on your Desktop.

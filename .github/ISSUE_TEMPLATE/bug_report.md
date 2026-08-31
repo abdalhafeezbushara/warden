@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something Warden did wrong — especially an enforcement bypass or recording gap
+about: Something Driftward did wrong — especially an enforcement bypass or recording gap
 labels: bug
 ---
 
@@ -10,12 +10,12 @@ wasn't recorded, forged receipt), please use private reporting instead — see
 SECURITY.md.
 
 **To reproduce**
-The exact `warden ...` command and the skill/agent involved.
+The exact `driftward ...` command and the skill/agent involved.
 
 **Expected vs actual**
-What you expected Warden to block/record, and what it actually did.
+What you expected Driftward to block/record, and what it actually did.
 
-**`warden doctor` output**
+**`driftward doctor` output**
 ```
 paste here
 ```
@@ -23,4 +23,4 @@ paste here
 **Environment**
 - macOS version:
 - Python version:
-- Warden version (`warden --version`):
+- Driftward version (`driftward --version`):

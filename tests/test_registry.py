@@ -13,20 +13,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import behavior, crypto, registry
+from driftward import behavior, crypto, registry
 
 
 class SignedRegistry(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-registry-"))
-        self._old = os.environ.get("WARDEN_HOME")
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-registry-"))
+        self._old = os.environ.get("DRIFTWARD_HOME")
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
 
     def tearDown(self):
         if self._old is None:
-            os.environ.pop("WARDEN_HOME", None)
+            os.environ.pop("DRIFTWARD_HOME", None)
         else:
-            os.environ["WARDEN_HOME"] = self._old
+            os.environ["DRIFTWARD_HOME"] = self._old
         shutil.rmtree(self.home, ignore_errors=True)
 
     def _entry(self):

@@ -1,5 +1,5 @@
 name: agent:cursor
-description: Warden baseline for Cursor Agent (CLI). Cursor's headless agent CLI.
+description: Driftward baseline for Cursor Agent (CLI). Cursor's headless agent CLI.
 
 filesystem:
   read:

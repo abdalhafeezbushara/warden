@@ -5,15 +5,15 @@ It is only as good as the review behind it. Contribute one like this.
 
 ## 1. Observe the real behavior
 
-Run the server under Warden and let it do representative work, so its actual
+Run the server under Driftward and let it do representative work, so its actual
 capabilities are recorded:
 
 ```bash
 # an MCP server, as its own confined principal
-warden mcp run <name>            # drive it through your agent, or exercise its tools
+driftward mcp run <name>            # drive it through your agent, or exercise its tools
 # then inspect what it did
-warden report
-warden behavior
+driftward report
+driftward behavior
 ```
 
 For fuller filesystem/process coverage, add `--deep` (needs Full Disk Access +
@@ -23,8 +23,8 @@ drifts consumers will see.
 ## 2. Approve and publish
 
 ```bash
-warden baseline approve <session>          # sign it locally
-warden registry publish "<baseline-name>" \
+driftward baseline approve <session>          # sign it locally
+driftward registry publish "<baseline-name>" \
     --out entries/<slug>.json \
     --reviewer "your-name" \
     --source "https://link-to-your-review-or-the-package" \

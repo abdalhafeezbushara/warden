@@ -1,0 +1,39 @@
+{
+  "capabilities": {
+    "credential": [],
+    "filesystem": [],
+    "ipc": [],
+    "network": [
+      {
+        "action": "connect",
+        "port": 443,
+        "resource": "api.github.com"
+      }
+    ],
+    "process": []
+  },
+  "coverage": {
+    "credentials": true,
+    "deep": false,
+    "network": "hard"
+  },
+  "provenance": {
+    "driftward_version": "0.2.0",
+    "notes": "EXAMPLE. Definition-pinned to npx server-github; a package/arg swap becomes identity drift.",
+    "reviewed_at": 1788200232.942,
+    "reviewer": "driftward (example)",
+    "source": "example \u2014 see registry/CONTRIBUTING.md; NOT production trust"
+  },
+  "schema": "driftward.registry-entry/v1",
+  "signature": {
+    "algorithm": "ed25519",
+    "payload_sha256": "34a180667d782b61e25e5d6a9f366cbcf876cfdb406f6db3a7bc9836e70464ca",
+    "public_key": "f6d1c44665847e2e457157bf4a3b5931400570bc723a0110bf8619613813ef3e",
+    "value": "6f3e80650141169e712894df827f772457bb85f8fcae876ff859f76a87e4fb38e1ccdf31ba414aed69c78af08a89fdf99647594f0b1b3244e5d29eacd958960c"
+  },
+  "subject": {
+    "definition_sha256": "7535c0cfcac4043757689b49f801245722b988e7290861d7a6e4f489ca8a23b3",
+    "kind": "mcp",
+    "name": "github"
+  }
+}

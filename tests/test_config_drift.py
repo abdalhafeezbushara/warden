@@ -12,15 +12,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden import config
-from warden.policy import Policy, NetworkRules, to_yaml, default_policy
+from driftward import config
+from driftward.policy import Policy, NetworkRules, to_yaml, default_policy
 
 
 class ProjectDiscovery(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="warden-proj-"))
+        self.root = Path(tempfile.mkdtemp(prefix="driftward-proj-"))
         (self.root / ".git").mkdir()  # marks a project boundary
-        (self.root / ".warden.yaml").write_text(to_yaml(default_policy(str(self.root))))
+        (self.root / ".driftward.yaml").write_text(to_yaml(default_policy(str(self.root))))
         self.sub = self.root / "a" / "b"
         self.sub.mkdir(parents=True)
 
@@ -30,15 +30,15 @@ class ProjectDiscovery(unittest.TestCase):
     def test_discovery_walks_up(self):
         found = config.find_project_policy(self.sub)
         self.assertIsNotNone(found)
-        self.assertEqual(found.name, ".warden.yaml")
+        self.assertEqual(found.name, ".driftward.yaml")
 
     def test_stops_at_git_root(self):
         # A directory above the git root must not see the project's policy.
         parent = self.root.parent
         found = config.find_project_policy(parent)
-        # parent is a temp dir without a .warden.yaml; should be None or unrelated
+        # parent is a temp dir without a .driftward.yaml; should be None or unrelated
         if found is not None:
-            self.assertNotEqual(found.resolve(), (self.root / ".warden.yaml").resolve())
+            self.assertNotEqual(found.resolve(), (self.root / ".driftward.yaml").resolve())
 
     def test_agent_egress_merged(self):
         pol = Policy(name="strict", network=NetworkRules(allow=["intranet.local"], deny_all_other=True))
@@ -54,18 +54,18 @@ class ProjectDiscovery(unittest.TestCase):
 
 class DriftDetection(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-drift-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
-        from warden import sessions as sess
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-drift-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
+        from driftward import sessions as sess
         importlib.reload(sess)
         self.sess = sess
-        from warden.recorder import Recorder
+        from driftward.recorder import Recorder
         self._make("20260101-000001", ["a.com"])
         self._make("20260101-000002", ["a.com"])
         self._make("20260101-000003", ["a.com", "newhost.evil"])  # drift here
 
     def _make(self, sid, hosts, argv=("sh", "skill.sh")):
-        from warden.recorder import Recorder
+        from driftward.recorder import Recorder
         rec = Recorder(self.home / "sessions" / f"{sid}.log")
         rec.start({"argv": list(argv), "policy": "p", "enforce": True})
         for h in hosts:
@@ -74,7 +74,7 @@ class DriftDetection(unittest.TestCase):
         rec.seal({"exit_code": 0})
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def test_drift_flags_new_host(self):

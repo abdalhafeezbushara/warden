@@ -1,9 +1,9 @@
-# Contributing to Warden
+# Contributing to Driftward
 
-Thanks for helping make AI agents safer to run. Warden has two firm principles;
+Thanks for helping make AI agents safer to run. Driftward has two firm principles;
 everything else is negotiable.
 
-1. **Standard library only.** Warden has zero runtime dependencies and that is a
+1. **Standard library only.** Driftward has zero runtime dependencies and that is a
    feature — it installs anywhere Python 3.11+ runs, and a security tool with no
    dependency supply chain is easier to trust. Do not add a third-party runtime
    dependency. (Dev-only tooling in `pip install .[dev]` is fine.)
@@ -15,18 +15,18 @@ everything else is negotiable.
 
 ```bash
 git clone <your-fork>
-cd warden
+cd driftward
 python3 -m venv .venv && .venv/bin/pip install -e .
 python3 -m unittest discover -s tests -v
-python3 -m warden doctor
+python3 -m driftward doctor
 ```
 
-Use `python3 -m warden ...` during development.
+Use `python3 -m driftward ...` during development.
 
 ## Good first contributions
 
-- **Agent baselines** (`warden/agents.py`) — add or refine the egress allow-list
-  for a coding agent. Ground it: run `warden record <tool>` and read the report.
+- **Agent baselines** (`driftward/agents.py`) — add or refine the egress allow-list
+  for a coding agent. Ground it: run `driftward record <tool>` and read the report.
 - **Skill policies** (`policies/skills/*.yaml`) — a reviewed least-privilege
   policy for a popular skill or MCP server. Include how you derived it.
 - **Docs and examples.**
@@ -42,7 +42,7 @@ approvals. Open an issue to discuss before a big change.
 Any change to enforcement, recording, policy parsing, or signing needs a test.
 The bar for an enforcement change is a test that shows the *dangerous* action
 failing under the sandbox and the *safe* action still working. See
-`tests/test_warden.py` for the pattern.
+`tests/test_driftward.py` for the pattern.
 
 ## Style
 

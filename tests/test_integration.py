@@ -18,11 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 class FullPipeline(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-e2e-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-e2e-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
         import importlib
-        # Reload modules that cache WARDEN_HOME-derived paths.
-        from warden import runner, sessions, recorder
+        # Reload modules that cache DRIFTWARD_HOME-derived paths.
+        from driftward import runner, sessions, recorder
         importlib.reload(recorder)
         importlib.reload(runner)
         importlib.reload(sessions)
@@ -30,11 +30,11 @@ class FullPipeline(unittest.TestCase):
         self.sessions = sessions
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def test_record_run_produces_signed_verifiable_scored_session(self):
-        from warden.policy import default_policy
+        from driftward.policy import default_policy
 
         pol = default_policy(str(self.home))
         # A trivial command that exits cleanly and makes no network calls.
@@ -53,8 +53,8 @@ class FullPipeline(unittest.TestCase):
         self.assertLessEqual(s["risk"]["score"], 25)
 
         # The signed log verifies, and against the machine key.
-        from warden.recorder import verify_log
-        from warden import crypto
+        from driftward.recorder import verify_log
+        from driftward import crypto
         log = self.home / "sessions" / "e2e-1.log"
         ok, msg = verify_log(log)
         self.assertTrue(ok, msg)
@@ -63,7 +63,7 @@ class FullPipeline(unittest.TestCase):
         self.assertTrue(ok2)
 
     def test_overview_and_drift_compose(self):
-        from warden.policy import default_policy
+        from driftward.policy import default_policy
         pol = default_policy(str(self.home))
         for i in range(2):
             self.runner.run(["/usr/bin/true"], pol, enforce=False, session=f"e2e-multi-{i}")

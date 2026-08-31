@@ -1,0 +1,33 @@
+{
+  "capabilities": {
+    "credential": [],
+    "filesystem": [],
+    "ipc": [],
+    "network": [],
+    "process": []
+  },
+  "coverage": {
+    "credentials": true,
+    "deep": false,
+    "network": "hard"
+  },
+  "provenance": {
+    "driftward_version": "0.2.0",
+    "notes": "EXAMPLE. Filesystem MCP server: no network egress expected.",
+    "reviewed_at": 1788200232.959,
+    "reviewer": "driftward (example)",
+    "source": "example \u2014 see registry/CONTRIBUTING.md; NOT production trust"
+  },
+  "schema": "driftward.registry-entry/v1",
+  "signature": {
+    "algorithm": "ed25519",
+    "payload_sha256": "5facbcf137625d6b8433bb034beb2fbb410ceb9dfd189d59c70e58e4742d5cf0",
+    "public_key": "f6d1c44665847e2e457157bf4a3b5931400570bc723a0110bf8619613813ef3e",
+    "value": "b551d350c6f2fbd5831b8f8c302dbeb091feef3735f3e21d86181ea106888ca8562af87402cdd7f89b62dffcf5a8f646a6ea45b4edfbbb01d52a57efdd232a04"
+  },
+  "subject": {
+    "definition_sha256": null,
+    "kind": "mcp",
+    "name": "@modelcontextprotocol/server-filesystem"
+  }
+}

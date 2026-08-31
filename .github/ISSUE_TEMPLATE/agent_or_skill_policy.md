@@ -9,7 +9,7 @@ Name and where it comes from.
 
 **Hosts it needs (and why)**
 List each host and what it's for. The honest way to derive this is
-`warden record <tool>` or `warden profile <skill>` and reading the report —
+`driftward record <tool>` or `driftward profile <skill>` and reading the report —
 please say how you got the list.
 
 **Hosts you deliberately excluded**

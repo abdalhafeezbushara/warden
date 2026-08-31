@@ -1,5 +1,5 @@
 name: agent:copilot
-description: Warden baseline for GitHub Copilot CLI. GitHub Copilot in the terminal (also `gh copilot`).
+description: Driftward baseline for GitHub Copilot CLI. GitHub Copilot in the terminal (also `gh copilot`).
 
 filesystem:
   read:

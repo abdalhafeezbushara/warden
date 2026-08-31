@@ -1,0 +1,39 @@
+{
+  "capabilities": {
+    "credential": [],
+    "filesystem": [],
+    "ipc": [],
+    "network": [
+      {
+        "action": "connect",
+        "port": 443,
+        "resource": "api.github.com"
+      }
+    ],
+    "process": []
+  },
+  "coverage": {
+    "credentials": true,
+    "deep": false,
+    "network": "hard"
+  },
+  "provenance": {
+    "notes": "EXAMPLE. Reaches only api.github.com. Definition-pinned: a package/arg swap flips this to identity drift.",
+    "reviewed_at": 1788199911.633,
+    "reviewer": "warden (example)",
+    "source": "example \u2014 pinned to `npx -y @modelcontextprotocol/server-github`; install as the server name you use in your config",
+    "warden_version": "0.2.0"
+  },
+  "schema": "warden.registry-entry/v1",
+  "signature": {
+    "algorithm": "ed25519",
+    "payload_sha256": "a840dc46471bec1dfede396ea2a52153ac882bcfdb7b3f416ffc3fc8c85ca171",
+    "public_key": "77308524a868d0d6c838ad8bd8a02d89f79f79bd6daae9fedaa0223fe4a6a335",
+    "value": "1d12d2f30cd89d009c60374013f1c293c44c72360165a7dbd613b7c68312dc01fa80312c92edd021d28229400bd0c21074fb74b8a348a57b1322a40aebfe410f"
+  },
+  "subject": {
+    "definition_sha256": "7535c0cfcac4043757689b49f801245722b988e7290861d7a6e4f489ca8a23b3",
+    "kind": "mcp",
+    "name": "github"
+  }
+}

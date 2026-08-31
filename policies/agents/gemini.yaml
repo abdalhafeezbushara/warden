@@ -1,5 +1,5 @@
 name: agent:gemini
-description: Warden baseline for Gemini CLI. Google's Gemini command-line agent.
+description: Driftward baseline for Gemini CLI. Google's Gemini command-line agent.
 
 filesystem:
   read:

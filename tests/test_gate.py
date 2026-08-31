@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from warden.recorder import Recorder
-from warden import intelligence
+from driftward.recorder import Recorder
+from driftward import intelligence
 
 
 class GateLogic(unittest.TestCase):
@@ -39,15 +39,15 @@ class GateLogic(unittest.TestCase):
 
 class GateEndToEnd(unittest.TestCase):
     def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="warden-gate-"))
-        os.environ["WARDEN_HOME"] = str(self.home)
+        self.home = Path(tempfile.mkdtemp(prefix="driftward-gate-"))
+        os.environ["DRIFTWARD_HOME"] = str(self.home)
         import importlib
-        from warden import sessions
+        from driftward import sessions
         importlib.reload(sessions)
         self.sessions = sessions
 
     def tearDown(self):
-        os.environ.pop("WARDEN_HOME", None)
+        os.environ.pop("DRIFTWARD_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def _make(self, sid, hosts, verdict="deny"):

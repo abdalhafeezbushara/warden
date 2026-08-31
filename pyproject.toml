@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "warden-agent"
+name = "driftward"
 version = "0.2.0"
 description = "Least privilege and a flight recorder for AI coding agents."
 readme = "README.md"
@@ -25,14 +25,14 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/abdalhafeezbushara/warden"
-Issues = "https://github.com/abdalhafeezbushara/warden/issues"
+Homepage = "https://github.com/abdalhafeezbushara/driftward"
+Issues = "https://github.com/abdalhafeezbushara/driftward/issues"
 
 [project.scripts]
-warden = "warden.cli:main"
+driftward = "driftward.cli:main"
 
 [tool.setuptools]
-packages = ["warden", "warden.dashboard"]
+packages = ["driftward", "driftward.dashboard"]
 
 [tool.setuptools.package-data]
-warden = ["dashboard/*"]
+driftward = ["dashboard/*"]

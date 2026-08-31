@@ -1,10 +1,10 @@
-# Warden roadmap: basic → advanced
+# Driftward roadmap: basic → advanced
 
-A structured plan to move Warden from a solid egress-firewall + signed-logger
+A structured plan to move Driftward from a solid egress-firewall + signed-logger
 (v0.1) to an advanced behavioral-security platform for AI agents. Each phase
 lists its goal, deliverables, how it is tested, and known constraints.
 
-**Status: the v0.2 security core is shipped and covered by 149 tests.** Phases
+**Status: the v0.2 security core is shipped and covered by a comprehensive test suite.** Phases
 1, 3, and the macOS portion of 4 are implemented; phases 2, 5, 6, and 7 have
 useful shipped slices plus the explicitly listed work below. See
 [FEATURES.md](FEATURES.md) for the prioritized backlog.
@@ -29,7 +29,7 @@ useful shipped slices plus the explicitly listed work below. See
 
 ## Phase 1 — Behavioral integrity  ✅ shipped
 
-**Goal:** make Warden *understand* behavior, not just record it.
+**Goal:** make Driftward *understand* behavior, not just record it.
 - Versioned behavior manifests normalize network, process, filesystem, IPC,
   and credential capabilities into portable, deterministic evidence.
 - Explicit Ed25519-signed approved baselines, scoped by subject + workspace.
@@ -48,7 +48,9 @@ useful shipped slices plus the explicitly listed work below. See
 - Per-agent process and credential scoping is shipped.
 - Per-MCP-server sub-policies are shipped for local stdio servers: an
   authenticated parent broker launches each exact pre-registered definition as
-  a strict, signed principal. **Pending:** a gateway for remote URL/SSE servers.
+  a strict, signed principal. Remote (`url`) servers are shipped too — a
+  sandboxed stdio↔HTTP bridge, egress-locked to the declared host, for both
+  Streamable HTTP and legacy SSE transports.
 **Tested:** live `sandbox-exec` runs assert denied/allowed outcomes.
 
 ## Phase 3 — Live approvals (human-in-the-loop)  ✅ logic testable now
@@ -63,7 +65,7 @@ useful shipped slices plus the explicitly listed work below. See
 
 **Goal:** record every file open, process exec, and socket — the true flight
 recorder. Correlate ES events to the sandboxed child by pid subtree.
-- `warden run --deep` streams `sudo eslogger --format json exec fork open ...`,
+- `driftward run --deep` streams `sudo eslogger --format json exec fork open ...`,
   filters to the child's process subtree, and records into the same signed log.
 **Tested:** event parser + pid-correlation unit-tested against captured/synthetic
 eslogger JSONL. **Live path requires Full Disk Access on the terminal** (doc'd).
@@ -89,9 +91,12 @@ bypass recording. Missing bwrap fails closed by default.
 ## Phase 7 — Distribution & trust  ◐ partially shipped
 
 **Goal:** make it a platform.
-- Shipped: GitHub Action and risk/blocked-egress/behavior-drift CI gate, plus
-  portable signed behavior baseline JSON.
-- **Pending:** signed community registry, signed export command, and team policy
+- Shipped: GitHub Action and risk/blocked-egress/behavior-drift CI gate,
+  portable signed behavior baseline JSON, and the **signed community registry**
+  (`driftward registry`) — publish/trust/verify/install of reviewed, Ed25519-signed
+  baselines and policies, deny-by-default trust.
+- **Pending:** a curated public registry (independently-published maintainer key
+  + version-pinned entries), signed export command, and team policy
   inheritance/composition.
 
 ## Continuous

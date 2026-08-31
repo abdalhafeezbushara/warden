@@ -1,14 +1,14 @@
-name: "Warden"
-description: "Run a command under Warden and fail the build on undisclosed egress or high risk."
+name: "Driftward"
+description: "Run a command under Driftward and fail the build on undisclosed egress or high risk."
 branding:
   icon: "shield"
   color: "blue"
 inputs:
   command:
-    description: "The command to run under Warden (e.g. an agent or build step)."
+    description: "The command to run under Driftward (e.g. an agent or build step)."
     required: true
   policy:
-    description: "Path to a Warden policy file (optional; default policy if omitted)."
+    description: "Path to a Driftward policy file (optional; default policy if omitted)."
     required: false
   max-risk:
     description: "Fail if the session risk score exceeds this (0-100)."
@@ -34,50 +34,50 @@ runs:
         if [ "$RUNNER_OS" = "Linux" ]; then
           sudo apt-get update && sudo apt-get install -y bubblewrap || true
         fi
-    - name: Install Warden
+    - name: Install Driftward
       shell: bash
       run: python -m pip install "${{ github.action_path }}"
-    - name: Run under Warden
+    - name: Run under Driftward
       shell: bash
       env:
-        WARDEN_ACTION_COMMAND: "${{ inputs.command }}"
-        WARDEN_ACTION_POLICY: "${{ inputs.policy }}"
+        DRIFTWARD_ACTION_COMMAND: "${{ inputs.command }}"
+        DRIFTWARD_ACTION_POLICY: "${{ inputs.policy }}"
       run: |
         POLICY_ARGS=()
-        if [ -n "$WARDEN_ACTION_POLICY" ]; then
-          POLICY_ARGS=(--policy "$WARDEN_ACTION_POLICY")
+        if [ -n "$DRIFTWARD_ACTION_POLICY" ]; then
+          POLICY_ARGS=(--policy "$DRIFTWARD_ACTION_POLICY")
         fi
         # Capture the command's real exit code (do NOT mask it) so a failing
         # build step still fails the job — the gate runs regardless below.
         set +e
-        warden run "${POLICY_ARGS[@]}" -- bash -lc "$WARDEN_ACTION_COMMAND"
-        echo "warden_cmd_exit=$?" >> "$GITHUB_ENV"
+        driftward run "${POLICY_ARGS[@]}" -- bash -lc "$DRIFTWARD_ACTION_COMMAND"
+        echo "driftward_cmd_exit=$?" >> "$GITHUB_ENV"
     - name: Gate on egress and risk
       shell: bash
       env:
-        WARDEN_ACTION_FAIL_BLOCKED: "${{ inputs.fail-on-blocked }}"
-        WARDEN_ACTION_MAX_RISK: "${{ inputs.max-risk }}"
-        WARDEN_ACTION_BASELINE: "${{ inputs.behavior-baseline }}"
-        WARDEN_ACTION_FAIL_NEW: "${{ inputs.fail-on-new }}"
+        DRIFTWARD_ACTION_FAIL_BLOCKED: "${{ inputs.fail-on-blocked }}"
+        DRIFTWARD_ACTION_MAX_RISK: "${{ inputs.max-risk }}"
+        DRIFTWARD_ACTION_BASELINE: "${{ inputs.behavior-baseline }}"
+        DRIFTWARD_ACTION_FAIL_NEW: "${{ inputs.fail-on-new }}"
       run: |
         FAIL_ARGS=()
-        if [ "$WARDEN_ACTION_FAIL_BLOCKED" = "true" ]; then
+        if [ "$DRIFTWARD_ACTION_FAIL_BLOCKED" = "true" ]; then
           FAIL_ARGS=(--fail-on-blocked)
         fi
         BEHAVIOR_ARGS=()
-        if [ -n "$WARDEN_ACTION_BASELINE" ]; then
-          BEHAVIOR_ARGS+=(--baseline "$WARDEN_ACTION_BASELINE")
+        if [ -n "$DRIFTWARD_ACTION_BASELINE" ]; then
+          BEHAVIOR_ARGS+=(--baseline "$DRIFTWARD_ACTION_BASELINE")
         fi
-        if [ -n "$WARDEN_ACTION_FAIL_NEW" ]; then
-          BEHAVIOR_ARGS+=(--fail-on-new "$WARDEN_ACTION_FAIL_NEW")
+        if [ -n "$DRIFTWARD_ACTION_FAIL_NEW" ]; then
+          BEHAVIOR_ARGS+=(--fail-on-new "$DRIFTWARD_ACTION_FAIL_NEW")
         fi
         # Composite steps run with -e; disable it so both exit codes can be
         # collected before deciding the final result.
         set +e
-        warden gate --max-risk "$WARDEN_ACTION_MAX_RISK" \
+        driftward gate --max-risk "$DRIFTWARD_ACTION_MAX_RISK" \
           "${FAIL_ARGS[@]}" "${BEHAVIOR_ARGS[@]}"
         gate=$?
-        cmd="${warden_cmd_exit:-0}"
+        cmd="${driftward_cmd_exit:-0}"
         if [ "$cmd" -ne 0 ]; then
           echo "::error::the command exited $cmd"; exit "$cmd"
         fi
