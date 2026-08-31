@@ -1,0 +1,60 @@
+name: agent:gemini
+description: Warden baseline for Gemini CLI. Google's Gemini command-line agent.
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.gemini/**
+    - ~/.config/gemini/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.gemini/**
+    - ~/.config/gemini/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubusercontent.com
+    - cloudcode-pa.googleapis.com
+    - codeload.github.com
+    - crates.io
+    - files.pythonhosted.org
+    - generativelanguage.googleapis.com
+    - get.pnpm.io
+    - github.com
+    - oauth2.googleapis.com
+    - proxy.golang.org
+    - pypi.org
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - static.crates.io
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+    - aws
+    - gcloud
+    - kubectl
+
+on_violation: block+receipt

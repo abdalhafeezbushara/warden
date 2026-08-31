@@ -1,0 +1,9 @@
+.venv
+build
+*.egg-info
+__pycache__
+docs
+tests
+examples
+scripts
+detonate

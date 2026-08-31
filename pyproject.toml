@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warden-agent"
+version = "0.2.0"
+description = "Least privilege and a flight recorder for AI coding agents."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Abdalhafeez" }]
+keywords = ["ai", "agents", "security", "sandbox", "least-privilege", "claude-code", "mcp"]
+dependencies = []   # stdlib only, on purpose
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/OWNER/warden"
+Issues = "https://github.com/OWNER/warden/issues"
+
+[project.scripts]
+warden = "warden.cli:main"
+
+[tool.setuptools]
+packages = ["warden"]
+
+[tool.setuptools.package-data]
+warden = ["dashboard/*"]

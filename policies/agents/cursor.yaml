@@ -1,0 +1,62 @@
+name: agent:cursor
+description: Warden baseline for Cursor Agent (CLI). Cursor's headless agent CLI.
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.cursor/**
+    - ~/.config/cursor/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.cursor/**
+    - ~/.config/cursor/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubusercontent.com
+    - api.anthropic.com
+    - api.cursor.sh
+    - api.openai.com
+    - api2.cursor.sh
+    - codeload.github.com
+    - crates.io
+    - files.pythonhosted.org
+    - get.pnpm.io
+    - github.com
+    - proxy.golang.org
+    - pypi.org
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - repo42.cursor.sh
+    - static.crates.io
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+    - aws
+    - gcloud
+    - kubectl
+
+on_violation: block+receipt

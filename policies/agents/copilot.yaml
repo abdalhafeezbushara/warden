@@ -1,0 +1,61 @@
+name: agent:copilot
+description: Warden baseline for GitHub Copilot CLI. GitHub Copilot in the terminal (also `gh copilot`).
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.copilot/**
+    - ~/.config/copilot/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.copilot/**
+    - ~/.config/copilot/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubcopilot.com
+    - *.githubusercontent.com
+    - api.github.com
+    - api.githubcopilot.com
+    - codeload.github.com
+    - copilot-proxy.githubusercontent.com
+    - crates.io
+    - files.pythonhosted.org
+    - get.pnpm.io
+    - github.com
+    - proxy.golang.org
+    - pypi.org
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - static.crates.io
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+    - aws
+    - gcloud
+    - kubectl
+
+on_violation: block+receipt

@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Warden's enforcement backend is macOS Seatbelt; the SeatbeltEnforcement
+    # tests are skipped automatically on other platforms, but the full unit
+    # suite (policy, crypto, recorder, profiler, sessions) runs everywhere.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install bubblewrap (Linux enforcement backend)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Run test suite
+        run: python -m unittest discover -s tests -v
+      - name: Self-test (proves live enforcement on macOS Seatbelt / Linux bubblewrap)
+        run: |
+          python -m pip install .
+          warden doctor

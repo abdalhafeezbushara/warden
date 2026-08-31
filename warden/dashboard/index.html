@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Warden</title>
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/favicon.svg" alt="" width="22" height="22" />
+      <span>Warden</span>
+      <em>flight recorder for AI agents</em>
+    </div>
+    <nav class="tabs">
+      <button data-view="overview" class="active">Overview</button>
+      <button data-view="sessions">Sessions</button>
+    </nav>
+    <div class="right">
+      <label class="live"><input type="checkbox" id="live" checked /> live</label>
+      <span class="loopback" title="Bound to 127.0.0.1, read-only">● local</span>
+    </div>
+  </header>
+
+  <main id="app">
+    <div class="loading">Loading…</div>
+  </main>
+
+  <footer class="foot">
+    <span id="footstat"></span>
+    <span>Warden is read-only and never leaves your machine.</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

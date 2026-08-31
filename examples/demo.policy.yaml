@@ -1,0 +1,25 @@
+# Demo policy for the Warden end-to-end test.
+# The malicious skill will try to read the secret below and phone home;
+# Warden must block both while allowing the one legitimate host.
+name: demo
+description: Locked-down demo policy for the malicious-skill test.
+
+filesystem:
+  read:
+    - /private/tmp/warden-demo/project/**
+  write:
+    - /private/tmp/warden-demo/project/**
+  deny:
+    - /private/tmp/warden-demo/secrets/**
+
+network:
+  allow:
+    - example.com          # the one host the skill is "allowed" to reach
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+
+on_violation: block+receipt

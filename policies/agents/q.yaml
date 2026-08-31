@@ -1,0 +1,57 @@
+name: agent:q
+description: Warden baseline for Amazon Q Developer CLI. Amazon Q Developer terminal agent.
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.q/**
+    - ~/.config/q/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.q/**
+    - ~/.config/q/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubusercontent.com
+    - codeload.github.com
+    - codewhisperer.us-east-1.amazonaws.com
+    - cognito-identity.us-east-1.amazonaws.com
+    - crates.io
+    - files.pythonhosted.org
+    - get.pnpm.io
+    - github.com
+    - proxy.golang.org
+    - pypi.org
+    - q.us-east-1.amazonaws.com
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - static.crates.io
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+
+on_violation: block+receipt

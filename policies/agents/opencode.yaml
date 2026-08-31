@@ -1,0 +1,60 @@
+name: agent:opencode
+description: Warden baseline for opencode. Open-source terminal agent; provider-dependent.
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.opencode/**
+    - ~/.config/opencode/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.opencode/**
+    - ~/.config/opencode/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubusercontent.com
+    - api.anthropic.com
+    - api.openai.com
+    - codeload.github.com
+    - crates.io
+    - files.pythonhosted.org
+    - get.pnpm.io
+    - github.com
+    - openrouter.ai
+    - proxy.golang.org
+    - pypi.org
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - static.crates.io
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+    - aws
+    - gcloud
+    - kubectl
+
+on_violation: block+receipt

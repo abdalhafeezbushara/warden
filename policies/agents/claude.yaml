@@ -1,0 +1,60 @@
+name: agent:claude
+description: Warden baseline for Claude Code. Anthropic's official CLI coding agent.
+
+filesystem:
+  read:
+    - .//**
+    - ~/.gitconfig
+    - ~/.config/git/**
+    - ~/.claude/**
+    - ~/.config/claude/**
+  write:
+    - .//**
+    - /tmp/**
+    - /private/tmp/**
+    - ~/.claude/**
+    - ~/.config/claude/**
+  deny:
+    - ~/.ssh/**
+    - ~/.aws/**
+    - ~/.gnupg/**
+    - ~/.config/gcloud/**
+    - ~/.kube/**
+    - ~/.docker/config.json
+    - ~/.netrc
+    - ~/.npmrc
+    - ~/.pypirc
+    - ~/.git-credentials
+    - **/.env
+    - **/.env.*
+    - ~/Library/Keychains/**
+
+network:
+  allow:
+    - *.github.com
+    - *.githubusercontent.com
+    - api.anthropic.com
+    - codeload.github.com
+    - crates.io
+    - files.pythonhosted.org
+    - get.pnpm.io
+    - github.com
+    - proxy.golang.org
+    - pypi.org
+    - registry.npmjs.org
+    - registry.yarnpkg.com
+    - sentry.io
+    - static.crates.io
+    - statsig.anthropic.com
+  deny: []
+  deny_all_other: true
+
+process:
+  deny:
+    - ssh
+    - scp
+    - aws
+    - gcloud
+    - kubectl
+
+on_violation: block+receipt
