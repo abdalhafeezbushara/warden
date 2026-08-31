@@ -9,4 +9,4 @@ Endpoint Security), behavioral risk scoring, and least-privilege policy
 generation. Pure standard library, local-first, no telemetry.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.0a2"

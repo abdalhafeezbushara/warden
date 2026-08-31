@@ -1,4 +1,4 @@
-# Driftward v0.2.0-alpha.1
+# Driftward v0.2.0-alpha.2
 
 **An open-source, local behavioral firewall for AI coding agents and MCP servers**
 — giving every server a confined identity, a signed behavioral baseline, and
@@ -15,11 +15,10 @@ break it.
 
 Your AI coding agent runs with **your** account — it can read `~/.ssh`, your cloud
 credentials, and every `.env` on disk, and any skill or MCP server it loads
-inherits that reach. You can't secure that supply chain by reading code: a static
-scan of 300 public MCP servers found **56% ship only opaque bundles**, and a
-package whose own manifest says *"deliberately malicious"* scored **0/100** on
-static analysis. The answer is to watch what agents *do*, and notice when it
-changes.
+inherits that reach. You can't secure that supply chain by reading code alone:
+packages can ship opaque bundles, static review can miss malicious behavior, and
+a later update can change runtime behavior after it was reviewed. The answer is
+to watch what agents *do*, and notice when it changes.
 
 ## What's in this release
 

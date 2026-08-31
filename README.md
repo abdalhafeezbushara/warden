@@ -16,8 +16,9 @@ Driftward puts a boundary around the agent:
 - **Diff** what changed — compare capabilities with an explicitly approved,
   signed baseline; observations never become trusted automatically.
 
-It is local-first, dependency-free (Python standard library only), and sends
-nothing anywhere.
+It is local-first and dependency-free (Python standard library only). Driftward
+sends no telemetry of its own; wrapped processes can connect only to destinations
+allowed by their policy, including configured remote MCP endpoints.
 
 > **Status: v0.2 (hardening release).** Enforcement (macOS Seatbelt / Linux
 > bubblewrap), proxy-observed egress, Ed25519-signed receipts, behavioral risk

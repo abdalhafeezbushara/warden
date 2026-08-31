@@ -3,7 +3,7 @@
 All notable changes to Driftward are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); Driftward uses semantic versioning.
 
-## [0.2.0] — unreleased
+## [0.2.0-alpha.2] — unreleased
 
 Advanced capabilities on top of v0.1.
 
