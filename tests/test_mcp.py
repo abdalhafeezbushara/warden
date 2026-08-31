@@ -203,6 +203,10 @@ class McpBrokerBridge(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists(),
                      "requires macOS Seatbelt")
+@unittest.skipIf(os.environ.get("GITHUB_ACTIONS") or os.environ.get("WARDEN_SKIP_SANDBOX_E2E"),
+                 "full agent→loopback-broker→inner-sandbox chain is unreliable on hosted macOS "
+                 "CI runners (VM/TCC restrictions); runs on real Macs. The broker's auth, "
+                 "registration, and stdio bridging are covered on CI by McpBrokerBridge.")
 class McpParentRunIntegration(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix="warden-mcp-parent-"))
