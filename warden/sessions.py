@@ -31,6 +31,11 @@ def summarize(session_id: str) -> dict:
     start = next((e for e in events if e["kind"] == "session.start"), {"data": {}})
     exit_e = next((e for e in events if e["kind"] == "child.exit"), {"data": {}})
     degraded = any(e["kind"] == "enforce.unavailable" for e in events)
+    timed_out = any(e["kind"] == "child.timeout" for e in events)
+    compiled = next((e for e in events if e["kind"] == "policy.compiled"), {"data": {}})
+    scrubbed = next((e for e in events if e["kind"] == "env.scrubbed"), {"data": {}})
+    env_allowed = next((e for e in events if e["kind"] == "env.allowed"), {"data": {}})
+    deep_summary_e = next((e for e in events if e["kind"] == "deep.summary"), {"data": {}})
     ok, integrity_msg = verify_log(path)
 
     allowed, blocked, warned = [], [], []
@@ -48,8 +53,10 @@ def summarize(session_id: str) -> dict:
             verdict = d.get("verdict")
             entry = {
                 "ts": e["ts"],
+                "kind": e["kind"],
                 "host": host,
                 "verdict": verdict,
+                "port": d.get("port"),
                 "detail": d.get("url") or f"{d.get('scheme','https')}:{d.get('port','')}",
                 "method": d.get("method"),
             }
@@ -60,19 +67,50 @@ def summarize(session_id: str) -> dict:
             else:
                 blocked.append(entry)
         if e["kind"] in ("net.connect", "net.request", "child.start", "child.exit",
-                         "session.start", "policy.compiled", "proxy.up"):
+                         "child.timeout", "session.start", "policy.compiled", "proxy.up",
+                         "enforce.unavailable", "env.allowed", "env.scrubbed", "deep.summary",
+                         "mcp.broker.started", "mcp.broker.launch", "mcp.broker.denied",
+                         "mcp.broker.stopped"):
             timeline.append({"ts": e["ts"], "kind": e["kind"], "data": e["data"]})
 
     sd = start.get("data", {})
+    exit_code = exit_e.get("data", {}).get("code")
+    not_started = bool(exit_e.get("data", {}).get("not_started"))
+    if not ok:
+        status = "tampered"
+    elif timed_out:
+        status = "timed-out"
+    elif degraded:
+        status = "degraded"
+    elif exit_code is None:
+        status = "running"
+    elif exit_code != 0:
+        status = "failed"
+    else:
+        status = "completed"
     result = {
         "id": session_id,
         "ts": start.get("ts"),
         "agent": sd.get("agent"),
+        "subject": sd.get("subject"),
+        "argv": sd.get("argv", []),
         "command": " ".join(sd.get("argv", [])) if sd.get("argv") else "",
         "policy": sd.get("policy"),
-        "mode": "observe" if degraded or not sd.get("enforce") else "enforce",
+        "policy_sha256": sd.get("policy_sha256"),
+        "platform": sd.get("platform"),
+        "executable": sd.get("executable"),
+        "executable_sha256": sd.get("executable_sha256"),
+        "mode": "degraded" if degraded else ("observe" if not sd.get("enforce") else "enforce"),
+        "status": status,
+        "backend": compiled.get("data", {}).get("backend"),
+        "degraded": degraded,
+        "not_started": not_started,
+        "timed_out": timed_out,
+        "env_scrubbed": scrubbed.get("data", {"count": 0, "names": []}),
+        "env_allowed": env_allowed.get("data", {}).get("names", []),
+        "deep_summary": deep_summary_e.get("data", {}),
         "cwd": sd.get("cwd"),
-        "exit": exit_e.get("data", {}).get("code"),
+        "exit": exit_code,
         "duration_s": exit_e.get("data", {}).get("duration_s"),
         "allowed": allowed,
         "blocked": blocked,
@@ -90,7 +128,8 @@ def summarize(session_id: str) -> dict:
     from . import intelligence
     base = {
         "id": session_id, "allowed": allowed, "blocked": blocked, "warned": warned,
-        "integrity_ok": ok,
+        "integrity_ok": ok, "degraded": degraded, "not_started": not_started,
+        "timed_out": timed_out,
     }
     result["risk"] = intelligence.session_risk(base)
     result["host_classes"] = {
@@ -111,10 +150,11 @@ def list_summaries() -> list[dict]:
             continue
         # Slim it for the list view.
         row = {k: s[k] for k in (
-            "id", "ts", "agent", "command", "policy", "mode", "exit",
+            "id", "ts", "agent", "subject", "command", "policy", "mode", "status", "backend", "exit",
             "duration_s", "allowed_count", "blocked_count", "integrity_ok")}
         row["risk"] = s.get("risk", {})
         row["warned_count"] = s.get("warned_count", 0)
+        row["env_scrubbed_count"] = s.get("env_scrubbed", {}).get("count", 0)
         out.append(row)
     return out
 
@@ -165,6 +205,10 @@ def overview() -> dict:
     agents: Counter = Counter()
     total_blocked = 0
     tampered = 0
+    degraded = 0
+    failed = 0
+    high_risk = 0
+    timed_out = 0
     for s in summaries:
         for a in s["allowed"]:
             host_counter[a["host"]] += 1
@@ -175,12 +219,28 @@ def overview() -> dict:
             agents[s["agent"]] += 1
         if not s["integrity_ok"]:
             tampered += 1
+        if s.get("degraded"):
+            degraded += 1
+        if s.get("status") == "failed":
+            failed += 1
+        if s.get("timed_out"):
+            timed_out += 1
+        if s.get("risk", {}).get("level") in ("high", "critical"):
+            high_risk += 1
     return {
         "sessions": len(summaries),
         "blocked_total": total_blocked,
         "tampered_sessions": tampered,
+        "degraded_sessions": degraded,
+        "failed_sessions": failed,
+        "timed_out_sessions": timed_out,
+        "high_risk_sessions": high_risk,
         "top_hosts": host_counter.most_common(10),
         "top_blocked": blocked_counter.most_common(10),
         "agents": dict(agents),
         "drift": drift(),
+        "recent": [{k: s.get(k) for k in (
+            "id", "ts", "agent", "subject", "command", "mode", "status", "backend", "exit",
+            "blocked_count", "integrity_ok", "risk")}
+                   for s in summaries[:5]],
     }

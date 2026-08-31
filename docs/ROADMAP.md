@@ -4,14 +4,16 @@ A structured plan to move Warden from a solid egress-firewall + signed-logger
 (v0.1) to an advanced behavioral-security platform for AI agents. Each phase
 lists its goal, deliverables, how it is tested, and known constraints.
 
-**Status: Phases 1–7 all shipped in v0.2** (91 tests; adversarial-reviewed and
-hardened — see the review-fix notes in CHANGELOG). Remaining work is in the
-"High-impact next" section of [FEATURES.md](FEATURES.md).
+**Status: the v0.2 security core is shipped and covered by 149 tests.** Phases
+1, 3, and the macOS portion of 4 are implemented; phases 2, 5, 6, and 7 have
+useful shipped slices plus the explicitly listed work below. See
+[FEATURES.md](FEATURES.md) for the prioritized backlog.
 
 ## Guiding constraints (honesty first)
 
-- **Standard library only** in the core. Optional platform helpers are allowed
-  but must degrade gracefully when absent.
+- **Standard library only** in the core. Optional observability helpers may
+  degrade clearly; a missing enforcement backend fails closed unless the user
+  explicitly requests record-only fallback.
 - **Never claim more than is tested.** A feature that can't be live-tested in a
   given environment ships behind an explicit flag and says so.
 - **Two hard external prerequisites** discovered during build, documented so we
@@ -23,23 +25,30 @@ hardened — see the review-fix notes in CHANGELOG). Remaining work is in the
     entitlement (Apple-gated). The recorder is built and unit-tested against
     captured/synthetic event data; the live capture path is thin and documented.
   - *Linux enforcement* uses `bubblewrap` (unprivileged user namespaces); where
-    those are disabled by a hardened distro, Warden degrades to record-only.
+    those are disabled by a hardened distro, enforced runs refuse to start.
 
-## Phase 1 — Intelligence layer  ✅ testable now
+## Phase 1 — Behavioral integrity  ✅ shipped
 
 **Goal:** make Warden *understand* behavior, not just record it.
-- Per-agent behavioral baseline (fingerprint of hosts, processes, fs scope).
-- Anomaly detection: flag a session that deviates from its agent's baseline.
+- Versioned behavior manifests normalize network, process, filesystem, IPC,
+  and credential capabilities into portable, deterministic evidence.
+- Explicit Ed25519-signed approved baselines, scoped by subject + workspace.
+  Observed history never becomes approval automatically.
+- Explainable drift with severity, runtime/policy identity changes, baseline
+  signature verification, and anti-poisoning replacement via explicit `--force`.
 - Egress reputation: classify each host (known-provider / developer-infra /
   unrecognized / suspicious-pattern) and score a session's risk.
 **Tested:** pure logic, unit tests over synthetic sessions.
 
-## Phase 2 — Enforcement depth  ✅ testable now (Seatbelt)
+## Phase 2 — Enforcement depth  ◐ partially shipped
 
 **Goal:** tighter, more expressive policies.
 - Strict filesystem mode: allow-listed writes (deny-all-writes then re-allow the
   project tree) instead of only denying secrets.
-- Per-agent process scoping; per-MCP-server sub-policies (each server a principal).
+- Per-agent process and credential scoping is shipped.
+- Per-MCP-server sub-policies are shipped for local stdio servers: an
+  authenticated parent broker launches each exact pre-registered definition as
+  a strict, signed principal. **Pending:** a gateway for remote URL/SSE servers.
 **Tested:** live `sandbox-exec` runs assert denied/allowed outcomes.
 
 ## Phase 3 — Live approvals (human-in-the-loop)  ✅ logic testable now
@@ -59,26 +68,31 @@ recorder. Correlate ES events to the sandboxed child by pid subtree.
 **Tested:** event parser + pid-correlation unit-tested against captured/synthetic
 eslogger JSONL. **Live path requires Full Disk Access on the terminal** (doc'd).
 
-## Phase 5 — Linux backend  ⚙ build; CI-tested
+## Phase 5 — Linux backend  ◐ filesystem shipped; hard egress pending
 
-**Goal:** cross-platform enforcement via `bubblewrap` (bind-mounts to hide
-secrets, network isolation to force the proxy). Policy model/recorder/signing
-are already OS-agnostic.
-**Tested:** GitHub Actions on ubuntu; graceful record-only fallback verified.
+**Goal:** cross-platform enforcement via `bubblewrap`. Filesystem/read
+confinement is generated and CI-tested; proxy environment wiring is shipped.
+**Pending:** network-namespace pinning so non-proxy-aware Linux clients cannot
+bypass recording. Missing bwrap fails closed by default.
 
-## Phase 6 — Dashboard v2  ✅ testable now
+## Phase 6 — Security console  ◐ behavior workspace shipped
 
 **Goal:** surface the new depth.
-- Recorder views (files/processes), per-agent baseline view, session diff
-  (rug-pull forensics), risk scores, live streaming (SSE) instead of polling.
-**Tested:** JSON API endpoints + parsing.
+- Shipped: runtime posture, capability detection, searchable/filterable
+  sessions, risk/status/backend signals, file/process/network evidence, signed
+  timeline, approved-drift inbox, baseline coverage/signature view, per-session
+  behavior diffs, and JSON export.
+- **Pending:** interactive approval with CSRF-safe local mutations, side-by-side
+  raw session diff, and SSE streaming (the current UI polls locally).
+**Tested:** session summary/API contracts plus live browser validation.
 
-## Phase 7 — Distribution & trust  ✅ mostly testable now
+## Phase 7 — Distribution & trust  ◐ partially shipped
 
 **Goal:** make it a platform.
-- GitHub Action (run agents under Warden in CI; fail on undisclosed egress).
-- Signed, reviewable community policies; `warden export` signed receipts.
-- Team policy inheritance / composition.
+- Shipped: GitHub Action and risk/blocked-egress/behavior-drift CI gate, plus
+  portable signed behavior baseline JSON.
+- **Pending:** signed community registry, signed export command, and team policy
+  inheritance/composition.
 
 ## Continuous
 

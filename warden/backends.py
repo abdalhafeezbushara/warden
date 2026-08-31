@@ -2,7 +2,8 @@
 
 Keeps the runner platform-agnostic. Each backend turns (policy, argv) into a
 wrapped command that enforces the policy, or reports that enforcement is
-unavailable here (so the runner degrades to record-only rather than pretending).
+unavailable. Enforced runs fail closed unless the caller explicitly opts into a
+record-only fallback.
 """
 
 from __future__ import annotations
@@ -25,12 +26,29 @@ def selected() -> str:
         return "seatbelt"
     if sys.platform.startswith("linux"):
         from . import linux
-        if linux.bubblewrap_available():
+        # Require bwrap to actually work — present-but-can't-create-namespaces
+        # (default Docker, hardened distros) must not be reported as enforcing.
+        if linux.bubblewrap_works():
             return "bubblewrap"
     return "none"
 
 
-def wrap(policy: Policy, argv: list[str], proxy_port: int | None):
+def unavailable_reason() -> str:
+    """Human explanation for why no backend is active, for a clear message."""
+    if sys.platform.startswith("linux"):
+        from . import linux
+        if linux.bubblewrap_available() and not linux.bubblewrap_works():
+            return ("bubblewrap is installed but cannot create user namespaces "
+                    "(disabled on this host). Enforcement is OFF. Fixes: install the "
+                    "bwrap AppArmor profile, use a setuid bwrap, or enable "
+                    "kernel.unprivileged_userns_clone. See docs/LIMITATIONS.md.")
+        if not linux.bubblewrap_available():
+            return "bubblewrap not installed (apt/dnf/pacman install bubblewrap)."
+    return f"no enforcement backend on {sys.platform}."
+
+
+def wrap(policy: Policy, argv: list[str], proxy_port: int | None,
+         broker_port: int | None = None):
     """Return (wrapped_argv, cleanup, backend_name).
 
     Raises BackendUnavailable when no enforcement backend exists here.
@@ -38,7 +56,7 @@ def wrap(policy: Policy, argv: list[str], proxy_port: int | None):
     backend = selected()
     if backend == "seatbelt":
         from . import seatbelt
-        profile = seatbelt.compile_profile(policy, proxy_port)
+        profile = seatbelt.compile_profile(policy, proxy_port, broker_port=broker_port)
         fd, path = tempfile.mkstemp(prefix="warden-", suffix=".sb")
         os.close(fd)  # mkstemp returns an open fd; close it to avoid a leak
         pf = Path(path)

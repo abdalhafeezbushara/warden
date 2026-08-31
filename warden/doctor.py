@@ -138,13 +138,21 @@ def _live_enforcement_test() -> bool:
             network=NetworkRules(deny_all_other=False),
             process=ProcessRules(),
         )
-        cat = "/bin/cat"
-        cmd, cleanup, _ = backends.wrap(pol, [cat, str(secret)], None)
+        # Prove BOTH that the sandbox actually ran (a canary is written to an
+        # allowed path) AND that the secret was blocked. Checking only "no secret
+        # in output" would false-pass when the sandbox fails to *start* (e.g.
+        # bwrap can't create a user namespace) — a non-zero exit with no output
+        # looks identical to a successful block.
+        canary = tmp / "ran.txt"
+        script = f'echo RAN > {canary}; cat {secret}'
+        cmd, cleanup, _ = backends.wrap(pol, ["/bin/sh", "-c", script], None)
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         finally:
             cleanup()
-        return res.returncode != 0 and token not in res.stdout
+        sandbox_ran = canary.exists() and canary.read_text().strip() == "RAN"
+        secret_blocked = token not in res.stdout
+        return sandbox_ran and secret_blocked
     except Exception:
         return False
     finally:

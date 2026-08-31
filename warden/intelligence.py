@@ -1,4 +1,4 @@
-"""Behavioral intelligence: host reputation, risk scoring, and agent baselines.
+"""Behavioral intelligence: host reputation, risk scoring, and observed history.
 
 Warden records what an agent did; this module reasons about whether it looks
 right. Three capabilities:
@@ -9,9 +9,9 @@ right. Three capabilities:
     domains) that a poisoned skill reaches to phone home.
   * session_risk   — a 0-100 risk score for one session from its blocked egress,
     unrecognized/suspicious hosts, and integrity.
-  * baselines      — a per-agent fingerprint of normal behavior, so a session
-    that contacts hosts or spawns processes the agent has never used before is
-    flagged as anomalous.
+  * observations   — a legacy per-agent fingerprint of previously seen hosts.
+    This can suggest anomalies but is not trusted approval; signed multi-capability
+    baselines live in :mod:`warden.behavior`.
 
 Pure logic over recorded summaries; no network, no dependencies.
 """
@@ -191,20 +191,34 @@ def session_risk(summary: dict) -> dict:
         score += 50
         reasons.append("session log integrity check FAILED (tampered)")
 
+    if summary.get("degraded"):
+        score += 35
+        reasons.append(
+            "requested enforcement was unavailable; child was not started"
+            if summary.get("not_started")
+            else "requested enforcement was unavailable; session ran with explicit fallback"
+        )
+
+    if summary.get("timed_out"):
+        score += 15
+        reasons.append("child exceeded its execution timeout")
+
     score = max(0, min(100, score))
     return {"score": score, "level": _level(score), "reasons": reasons}
 
 
-# ---- per-agent behavioral baselines ------------------------------------
+# ---- legacy observed-history fingerprints ------------------------------
+# These are intentionally NOT approved baselines.  Explicit, signed approval
+# lives in warden.behavior; merely seeing a capability must never make it trusted.
 
 def _baseline_dir() -> Path:
-    base = Path(os.environ.get("WARDEN_HOME", Path.home() / ".warden")) / "baselines"
+    base = Path(os.environ.get("WARDEN_HOME", Path.home() / ".warden")) / "observations"
     base.mkdir(parents=True, exist_ok=True)
     return base
 
 
 def build_baseline(agent: str, summaries: list[dict]) -> dict:
-    """Fold an agent's historical sessions into a fingerprint of normal behavior."""
+    """Fold historical sessions into an observed (not approved) host fingerprint."""
     hosts: set[str] = set()
     n = 0
     for s in summaries:

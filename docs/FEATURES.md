@@ -13,9 +13,9 @@ they move the needle, not by difficulty.
   binaries, pin egress to the recording proxy.
 - **Network flight recorder** — every egress host recorded, allowed or blocked,
   to a tamper-evident hash-chained log.
-- **Local dashboard** — read-only loopback UI: overview (sessions, blocked
-  egress, top hosts, tampered logs), session list, per-session detail with the
-  egress verdict list. Auto-refreshes for live sessions.
+- **Local security console** — read-only loopback UI with runtime posture,
+  capability status, approved drift inbox, signed-baseline coverage, searchable
+  sessions, network and file/process evidence, signed timeline, and JSON export.
 - **Tamper-evident + signed receipts** — `warden verify` proves a log was not
   altered and was signed by the expected key (`warden key` / `--pubkey`).
 - **Monitor mode** (`on_violation: warn`) — enforce the filesystem but let
@@ -27,26 +27,33 @@ they move the needle, not by difficulty.
 1. **Comprehensive recording (Endpoint Security)** ✅ — `warden run --deep`
    records every file open, process exec, and file create for the agent's
    process subtree via macOS eslogger (needs sudo + Full Disk Access).
-2. **Skill profiling** ✅ — `warden profile` detonates a skill and generates a
-   least-privilege policy from observed behavior, flagging unrecognized hosts.
+2. **Skill profiling** ✅ — `warden profile` time-boxes a semi-trusted skill
+   under strict host confinement and generates a least-privilege policy from
+   observed behavior, flagging unrecognized hosts.
 3. **Signed receipts (Ed25519)** ✅ — third-party-verifiable via `warden key`
    and `warden verify --pubkey`.
 4. **Live approvals** ✅ — `on_violation: ask` prompts allow-once/always/deny.
 5. **Behavioral intelligence** ✅ — `warden risk` classifies hosts (incl. real
    exfil infrastructure) and scores sessions; per-agent baselines.
-6. **CI gate + Linux backend + strict-fs + monitor mode** ✅.
+6. **CI gate + Linux backend + strict-fs/strict-read + monitor mode** ✅.
+7. **Approved behavioral integrity** ✅ — versioned behavior manifests,
+   explicit signed baselines, explainable capability drift, executable/policy
+   identity changes, and `warden gate --fail-on-new`. No auto-learning.
+8. **Per-MCP-server firewalling** ✅ — local stdio servers launch through an
+   authenticated parent broker as independent `mcp:<name>` principals, with
+   strict filesystem defaults, configured env preservation, signed baselines,
+   and definition/package drift. Remote URL/SSE confinement remains next.
 
 ## High-impact next
 
-1. **MCP server firewalling.** Treat each MCP server as its own principal with
-   its own egress and filesystem policy — the seam GitHub's own docs admit their
-   agent firewall does not cover.
+1. **Remote MCP gateway.** Extend the shipped stdio per-server identity and
+   confinement to remote URL/SSE transports through a recorded egress gateway.
 2. **Secrets brokering.** Instead of leaving long-lived tokens in env vars and
    dotfiles (how the 2025 s1ngularity attack worked), issue the agent
    short-lived, task-scoped credentials it can't exfiltrate.
-3. **Community policy registry (`policies/skills/*.yaml`).** Reviewed
-   least-privilege profiles for popular skills/MCP servers — the contribution
-   surface that turns users into contributors.
+3. **Community behavior + policy registry.** Reviewed least-privilege profiles
+   and signed expected-behavior manifests for popular skills/MCP servers — the
+   contribution surface that turns users into contributors.
 4. **Hardened Linux network pin** — netns + AF_UNIX/socat bridge so egress is
    hard-pinned to the proxy (not just via HTTP_PROXY), matching macOS's
    loopback pin.

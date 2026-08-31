@@ -6,9 +6,10 @@ Point it at a corpus of agent skills / MCP servers and it reports what they
   * **Static** — read the skill's files (SKILL.md, code, manifest) for network
     calls, credential-path access, subprocess use, and prompt-injection patterns,
     and note which hosts the skill *declares*.
-  * **Dynamic** — safely detonate the skill under Warden (filesystem protected,
-    egress contained and recorded) and observe the hosts it actually reaches and
-    the risk it scores.
+  * **Dynamic** — time-box the skill under Warden (strict read/write confinement,
+    egress blocked by default and recorded) and observe the hosts it attempts to
+    reach and the risk it scores. This host sandbox is for semi-trusted code;
+    unknown code belongs in the disposable container harness under detonate/.
 
 The payoff is the cross-check static analysis alone can't make and runtime alone
 can't explain: *"this skill contacted a host it never disclosed"*, aggregated
@@ -212,9 +213,12 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "skill"
 
 
+SCAN_TIMEOUT_S = 60
+
+
 def scan_target(target: Target, index: int = 0, allow_egress: bool = False,
                 static_only: bool = False) -> dict:
-    """Static-analyze a target and, if it has a command, safely detonate it.
+    """Static-analyze a target and, if it has a command, run it under confinement.
 
     static_only=True never executes anything — safe to run at scale on a corpus
     of untrusted third-party code.
@@ -267,23 +271,26 @@ def scan_target(target: Target, index: int = 0, allow_egress: bool = False,
                          Policy, ProcessRules)
 
     workdir = str(target.path)
-    # Allow the skill's DECLARED hosts and record+contain everything else, so a
-    # "blocked" host is precisely an UNDISCLOSED one. Filesystem stays protected;
-    # egress is contained (nothing leaves) unless allow_egress is set.
+    # Default detonation blocks ALL egress. Declared hosts are comparison data,
+    # not trusted destinations: a malicious package could simply "declare" its
+    # collector. --allow-egress is the explicit semi-trusted escape hatch.
     pol = Policy(
         name="scan",
         filesystem=FilesystemRules(read=[workdir + "/**"], write=[workdir + "/**", "/tmp/**"],
                                    deny=list(DEFAULT_SECRET_DENY)),
-        network=NetworkRules(allow=(["*"] if allow_egress else list(target.declared_hosts)),
+        network=NetworkRules(allow=(["*"] if allow_egress else []),
                              deny_all_other=True),
         process=ProcessRules(deny=["ssh", "scp"]),
         on_violation="block+receipt",
+        strict_fs=True,
+        strict_read=True,
     )
     sid = f"scan-{index:03d}-{_slug(target.name)}"
     cwd = os.getcwd()
     try:
         os.chdir(workdir)
-        runner.run(list(target.command), pol, enforce=True, session=sid, quiet=True)
+        runner.run(list(target.command), pol, enforce=True, session=sid, quiet=True,
+                   timeout=SCAN_TIMEOUT_S)
     except Exception as exc:
         result["error"] = str(exc)[:200]
         return result
@@ -291,6 +298,14 @@ def scan_target(target: Target, index: int = 0, allow_egress: bool = False,
         os.chdir(cwd)
 
     s = sessions.summarize(sid)
+    if s.get("not_started"):
+        result.update({
+            "session": sid,
+            "error": "enforcement unavailable; target was not executed",
+            "risk": s["risk"],
+        })
+        return result
+
     observed = sorted({e["host"] for e in s["allowed"]}
                       | {e["host"] for e in s["blocked"]}
                       | {e["host"] for e in s.get("warned", [])})
@@ -383,4 +398,3 @@ def aggregate(results: list[dict]) -> dict:
             or r.get("static_undisclosed_hosts") or r["static"]["injection"]
         ],
     }
-

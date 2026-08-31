@@ -189,5 +189,44 @@ class DeepRecorderIntegration(unittest.TestCase):
         self.assertEqual(dr.summary()["events"], {})
 
 
+class DeepStreamBuffering(unittest.TestCase):
+    """The startup-race fix: events captured BEFORE the child pid is known are
+    buffered, then replayed once attach() seeds the subtree tracker."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="warden-stream-"))
+        self.log = self.tmp / "s.log"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_prelaunch_events_replayed_after_attach(self):
+        import json as _json
+        rec = Recorder(self.log)
+        rec.start({"argv": ["agent"]})
+        stream = deep.DeepStream(rec, deep.DEEP_EVENTS)
+        # Simulate eslogger lines arriving BEFORE the child pid is known.
+        stream._ingest(_json.dumps(fork_event(100, 200)))       # root 100 forks 200
+        stream._ingest(_json.dumps(exec_event(200, 200, "/usr/bin/curl")))
+        stream._ingest(_json.dumps(open_event(999, "/etc/passwd")))  # unrelated
+        # Now the child pid (100) becomes known.
+        stream.attach(root_pid=100)
+        summ = stream.finish()
+        # The buffered subtree events were replayed and recorded.
+        kinds = [r["event"]["kind"] for r in read_log(self.log)]
+        self.assertIn("proc.fork", kinds)
+        self.assertIn("proc.exec", kinds)
+        self.assertGreaterEqual(summ["events"].get("proc.exec", 0), 1)
+
+    def test_buffer_capped(self):
+        rec = Recorder(self.log)
+        rec.start({"argv": ["a"]})
+        stream = deep.DeepStream(rec, deep.DEEP_EVENTS)
+        stream.MAX_BUFFER = 5
+        for _ in range(20):
+            stream._ingest("{}")
+        self.assertLessEqual(len(stream._buffer), 5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

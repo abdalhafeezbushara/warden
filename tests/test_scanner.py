@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -87,6 +88,26 @@ class CorpusLoading(unittest.TestCase):
         self.assertEqual(a.declared_hosts, ["api.x.com"])
         b = next(t for t in targets if t.name == "skill-b")
         self.assertIsNone(b.command)
+
+
+class DynamicContainment(unittest.TestCase):
+    def test_unavailable_enforcement_is_not_counted_as_detonated(self):
+        root = Path(tempfile.mkdtemp(prefix="warden-scan-unavailable-"))
+        target = scanner.Target("sample", root, ["sh", "run.sh"], [])
+        summary = {
+            "degraded": True,
+            "not_started": True,
+            "exit": 125,
+            "risk": {"score": 35, "level": "medium", "reasons": []},
+        }
+        try:
+            with mock.patch("warden.runner.run", return_value=125), \
+                    mock.patch("warden.sessions.summarize", return_value=summary):
+                result = scanner.scan_target(target)
+            self.assertFalse(result["detonated"])
+            self.assertIn("not executed", result["error"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class Aggregation(unittest.TestCase):

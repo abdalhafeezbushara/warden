@@ -6,6 +6,11 @@
   warden profile [AGENT] [--out F] [-- ARGS]       detonate a skill, generate a policy
   warden scan CORPUS [--html F] [--json F]         batch-scan a corpus → shareable finding
   warden risk|gate [LOG]                           score / CI-gate a session
+  warden behavior [LOG]                            emit a versioned behavior manifest
+  warden baseline approve|show|verify              manage signed approved behavior
+  warden diff [LOG] [--baseline NAME]              compare with approved behavior
+  warden mcp list|run|wrap|unwrap [--config F]     confine MCP servers as principals
+  warden registry publish|trust|verify|list|install  share/adopt signed baselines
   warden agents                                    list supported AI tools
   warden init   [AGENT]                            scaffold a project .warden.yaml
   warden dashboard                                 open the local session dashboard
@@ -107,14 +112,43 @@ def cmd_run(args, child):
         return 2
     if getattr(args, "strict", False):
         pol.strict_fs = True
+    if getattr(args, "strict_read", False):
+        pol.strict_read = True
+    # Keychain override: --deny-keychain re-seals it even for a keychain-auth
+    # agent; --allow-keychain opens it for any run. Otherwise the agent baseline
+    # decides (only cursor opens it).
+    from .policy import apply_keychain, keychain_allowed
+    if getattr(args, "deny_keychain", False):
+        pol = apply_keychain(pol, allow=False)
+    elif getattr(args, "allow_keychain", False):
+        pol = apply_keychain(pol, allow=True)
+    if sys.platform == "darwin" and keychain_allowed(pol):
+        who = key or "this command"
+        print(f"warden: macOS Keychain is READABLE by {who} (it authenticates there). "
+              "Other secrets stay denied; seal it with --deny-keychain.", file=sys.stderr)
     extra = " + strict-fs" if pol.strict_fs else ""
+    if pol.strict_read:
+        extra += " + strict-read"
     if getattr(args, "deep", False):
         extra += " + deep-recording"
         print("warden: --deep needs sudo + Full Disk Access on your terminal; "
               "it is best-effort and won't break the run if unavailable.", file=sys.stderr)
     print(f"warden: policy '{pol.name}' (from {source}), enforcing{extra}", file=sys.stderr)
-    return run(argv, pol, enforce=True, agent=key,
-               deep=getattr(args, "deep", False), deep_files=getattr(args, "deep_files", False))
+    return run(argv, pol, enforce=True, agent=key, subject=_parse_subject(getattr(args, "subject", None)),
+               deep=getattr(args, "deep", False), deep_files=getattr(args, "deep_files", False),
+               allow_record_fallback=getattr(args, "allow_record_fallback", False),
+               mcp_configs=getattr(args, "mcp_config", None))
+
+
+def _parse_subject(value: str | None) -> dict | None:
+    """`mcp:github` → {kind: mcp, name: github}; a bare `github` → command kind."""
+    if not value:
+        return None
+    kind, sep, name = value.partition(":")
+    if sep and (not kind.strip() or not name.strip()):
+        raise ValueError("--subject must be kind:name with both parts non-empty")
+    return ({"kind": kind.strip(), "name": name.strip()} if sep
+            else {"kind": "command", "name": kind.strip()})
 
 
 def cmd_record(args, child):
@@ -180,7 +214,13 @@ def cmd_profile(args, child):
         print("warden: specify an agent or a command to profile.\n"
               "  warden profile ./some-skill.sh\n  warden profile cursor", file=sys.stderr)
         return 2
-    code, generated, review = profile(child, agent=args.agent, allow_egress=args.allow_egress,
+    # If the positional isn't a known agent, treat it as the command to run
+    # (so `warden profile ./skill.sh` works, not just `warden profile -- ./skill.sh`).
+    agent_name = args.agent
+    if agent_name and not agentmod.get(agent_name):
+        child = [agent_name] + child
+        agent_name = None
+    code, generated, review = profile(child, agent=agent_name, allow_egress=args.allow_egress,
                                       out_path=args.out)
     print("\n" + "=" * 62)
     print("PROFILE REVIEW — hosts this skill contacted")
@@ -252,6 +292,369 @@ def cmd_risk(args, _child):
     return 0
 
 
+def _summary_for_log(log_arg: str | None):
+    from . import sessions as sess
+    log = _resolve_log(log_arg)
+    if not log or not log.exists():
+        raise FileNotFoundError("no session log found")
+    return sess.summarize(log.stem)
+
+
+def _print_manifest(manifest: dict) -> None:
+    print(f"Behavior: {manifest['subject']['key']}")
+    print(f"Session : {manifest['session']['id']}")
+    print(f"Digest  : {manifest['fingerprint']}")
+    coverage = manifest.get("coverage", {})
+    print("Coverage: network={}, deep={}, credentials={}".format(
+        coverage.get("network", "unknown"),
+        "yes" if coverage.get("deep") else "no",
+        "yes" if coverage.get("credentials") else "no"))
+    for category, capabilities in manifest.get("capabilities", {}).items():
+        print(f"\n{category.title()} ({len(capabilities)})")
+        if not capabilities:
+            print("  —")
+        for cap in capabilities:
+            port = f":{cap['port']}" if cap.get("port") else ""
+            print(f"  {cap.get('action', '?'):<10} {cap.get('resource', '?')}{port}")
+
+
+def cmd_behavior(args, _child):
+    import json
+    from . import behavior
+
+    manifest = behavior.build_manifest(_summary_for_log(args.log))
+    if args.out:
+        behavior.write_manifest(manifest, args.out)
+        print(f"warden: behavior manifest written to {args.out}", file=sys.stderr)
+    if args.json:
+        print(json.dumps(manifest, indent=2, sort_keys=True))
+    else:
+        _print_manifest(manifest)
+    return 0
+
+
+def cmd_baseline(args, _child):
+    import json
+    from . import behavior
+
+    if args.baseline_cmd == "list":
+        rows = behavior.list_baselines()
+        if args.json:
+            print(json.dumps(rows, indent=2, sort_keys=True))
+            return 0
+        if not rows:
+            print("No approved baselines. Start with: warden baseline approve [session]")
+            return 0
+        print(f"{'BASELINE':<28} {'CAPS':<6} {'SIGNED':<8} SOURCE")
+        print("-" * 76)
+        for row in rows:
+            source = ", ".join(str(s) for s in row.get("source_sessions", [])) or "—"
+            print(f"{row['name'][:27]:<28} {row.get('capability_count', 0):<6} "
+                  f"{('yes' if row.get('valid') else 'INVALID'):<8} {source}")
+        return 0
+
+    if args.baseline_cmd == "approve":
+        manifest = behavior.build_manifest(_summary_for_log(args.log))
+        baseline, path = behavior.approve(manifest, args.name, force=args.force)
+        print(f"APPROVED  {baseline['name']}")
+        print(f"signed by {baseline['signature']['public_key'][:16]}…")
+        print(f"stored at {path}")
+        return 0
+
+    baseline = behavior.load_baseline(args.name, require_valid=False)
+    if args.baseline_cmd == "verify":
+        ok, message = behavior.verify_baseline(baseline, args.pubkey)
+        print(("VERIFIED  " if ok else "FAILED    ") + message)
+        return 0 if ok else 3
+    if args.json:
+        print(json.dumps(baseline, indent=2, sort_keys=True))
+    else:
+        ok, message = behavior.verify_baseline(baseline)
+        print(f"Baseline: {baseline.get('name')}")
+        print(f"State   : {baseline.get('state')}")
+        print(f"Trust   : {message}")
+        print(f"Source  : {', '.join(baseline.get('source_sessions', []))}")
+        for category, capabilities in baseline.get("capabilities", {}).items():
+            print(f"  {category:<11} {len(capabilities)} approved")
+        return 0 if ok else 3
+    return 0
+
+
+def _print_diff(result: dict) -> None:
+    status = result["status"].upper()
+    if not result.get("session_integrity_ok", True):
+        print("!! session receipt NOT intact — this diff is computed from a tampered "
+              "log and cannot be trusted")
+    print(f"{status}  {result['subject']} against '{result['baseline']}'")
+    print(f"{result['new_count']} new · {result['removed_count']} absent · "
+          f"highest severity {result['highest_severity']}")
+    if not result["findings"] and not result["identity_changes"]:
+        print("  No capabilities outside the approved baseline.")
+    for finding in result["identity_changes"]:
+        print(f"  {finding['severity'].upper():<8} identity   {finding['reason']}")
+    for finding in result["findings"]:
+        cap = finding["capability"]
+        port = f":{cap['port']}" if cap.get("port") else ""
+        print(f"  {finding['severity'].upper():<8} {finding['category']:<10} "
+              f"{cap.get('action')} {cap.get('resource')}{port}")
+        print(f"           {finding['reason']}")
+
+
+def cmd_diff(args, _child):
+    import json
+    from . import behavior
+
+    manifest = behavior.build_manifest(_summary_for_log(args.log))
+    baseline = (behavior.load_baseline(args.baseline) if args.baseline
+                else behavior.baseline_for_manifest(manifest))
+    if baseline is None:
+        raise behavior.BehaviorError(
+            f"no approved baseline for '{manifest['subject']['key']}'; "
+            "run: warden baseline approve " + str(manifest["session"]["id"]))
+    result = behavior.diff(manifest, baseline)
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        _print_diff(result)
+    # Fail --exit-code on drift OR on a non-intact observation: a "stable" verdict
+    # read from a tampered log is not a pass.
+    untrustworthy = not result.get("session_integrity_ok", True)
+    return 1 if args.exit_code and (result["status"] == "drift" or untrustworthy) else 0
+
+
+def _bridge_env(server) -> dict:
+    """Environment for the sandboxed remote bridge: Warden's own package on the
+    path so `-m warden` imports under the scrubbed child env, plus any resolved
+    request headers passed by value through a private var (never argv, never the
+    log)."""
+    import json as _json
+    from . import mcp
+    env = {"PYTHONPATH": mcp._warden_package_root()}
+    if server.headers:
+        env["WARDEN_MCP_HEADERS"] = _json.dumps(mcp.resolve_headers(server))
+    return env
+
+
+def cmd_mcp(args, child):
+    import json
+    import os
+    from . import mcp
+    from .policy import load
+
+    if args.mcp_cmd == "_bridge":
+        from . import mcp_remote
+        raw = os.environ.get("WARDEN_MCP_HEADERS")
+        headers = json.loads(raw) if raw else {}
+        return mcp_remote.bridge(args.url, headers, transport=args.transport)
+
+    if args.mcp_cmd == "list":
+        servers = mcp.discover([args.config] if args.config else None)
+        if args.json:
+            print(json.dumps([{"name": s.name, "command": s.command, "args": s.args,
+                               "env_names": s.env_declared, "url": s.url,
+                               "source": s.source, "wrapped": s.wrapped,
+                               "wrapped_valid": s.wrapped_valid,
+                               "definition_sha256": s.definition_sha256}
+                              for s in servers], indent=2))
+            return 0
+        if not servers:
+            print("No MCP servers found. Looked in project .mcp.json, ~/.claude.json, "
+                  "~/.cursor/mcp.json, and VS Code configs.\n"
+                  "Point at one with: warden mcp list --config path/to/mcp.json", file=sys.stderr)
+            return 0
+        print(f"{'MCP SERVER':<24} {'KIND':<7} {'WRAPPED':<8} LAUNCH")
+        print("-" * 74)
+        for s in servers:
+            kind = "remote" if s.remote else "stdio"
+            launch = s.url if s.remote else " ".join(s.launch_command())
+            print(f"{s.name[:23]:<24} {kind:<7} {('yes' if s.wrapped else 'no'):<8} {launch[:34]}")
+        print("\nRun one as its own principal:  warden mcp run <name>")
+        print("Wrap them all into your config: warden mcp wrap --config <file>")
+        return 0
+
+    if args.mcp_cmd == "shim":
+        from . import mcp_broker
+
+        if os.environ.get(mcp_broker.BROKER_ENV):
+            return mcp_broker.run_shim(args.name, args.config, args.definition)
+        if os.environ.get("WARDEN_ACTIVE"):
+            raise RuntimeError(
+                "this wrapped config was not registered by the parent Warden; "
+                "pass `--mcp-config " + args.config + "` to `warden run`")
+        server = mcp.find(args.name, [args.config])
+        if not server or (server.command is None and not server.remote):
+            raise ValueError(f"no launchable MCP server '{args.name}' in {args.config}")
+        if server.definition_sha256 != args.definition:
+            raise ValueError("MCP definition changed after wrapping; run `warden mcp wrap --write` again")
+        if server.remote:
+            return run(mcp.bridge_command(server), mcp.remote_policy_for(server, os.getcwd()),
+                       enforce=True, subject=mcp.subject_for(server),
+                       env_overrides=_bridge_env(server), enable_mcp_broker=False)
+        pol = mcp.policy_for(server, os.getcwd())
+        return run(server.launch_command(), pol, enforce=True,
+                   subject=mcp.subject_for(server), env_overrides=mcp.resolve_env(server),
+                   enable_mcp_broker=False)
+
+    if args.mcp_cmd == "_serve":
+        import stat
+        from .runner import _warden_home
+
+        grant = Path(args.grant)
+        grants_root = (_warden_home() / "mcp-grants").resolve()
+        resolved = grant.resolve()
+        if resolved.parent != grants_root or grant.is_symlink():
+            raise ValueError("invalid MCP broker grant path")
+        mode = grant.stat().st_mode
+        if not stat.S_ISREG(mode) or mode & 0o077:
+            raise ValueError("MCP broker grant is not a private regular file")
+        server = mcp.McpServer.from_grant(json.loads(grant.read_text(encoding="utf-8")))
+        if server.remote:
+            return run(mcp.bridge_command(server), mcp.remote_policy_for(server, os.getcwd()),
+                       enforce=True, subject=mcp.subject_for(server),
+                       env_overrides=_bridge_env(server), enable_mcp_broker=False)
+        if not server.command:
+            raise ValueError("broker grants must describe a launchable server")
+        pol = mcp.policy_for(server, os.getcwd())
+        return run(server.launch_command(), pol, enforce=True,
+                   subject=mcp.subject_for(server), env_overrides=mcp.resolve_env(server),
+                   enable_mcp_broker=False)
+
+    if args.mcp_cmd == "run":
+        server = mcp.find(args.name, [args.config] if args.config else None)
+        if not server:
+            raise SystemExit(f"warden: no MCP server '{args.name}' in the discovered configs "
+                             "(try: warden mcp list).")
+        if server.remote:
+            pol = load(args.policy) if args.policy else mcp.remote_policy_for(server, os.getcwd())
+            from urllib.parse import urlparse
+            print(f"warden: remote MCP '{server.name}' as principal 'mcp:{server.name}', "
+                  f"egress locked to {urlparse(server.url).hostname}, enforcing", file=sys.stderr)
+            return run(mcp.bridge_command(server), pol, enforce=True,
+                       subject=mcp.subject_for(server), env_overrides=_bridge_env(server),
+                       enable_mcp_broker=False)
+        if child:
+            from dataclasses import replace
+            server = replace(server, args=server.args + child)
+        pol = load(args.policy) if args.policy else mcp.policy_for(server, os.getcwd())
+        if args.policy:
+            from dataclasses import replace
+            pol = replace(pol, env_allow=sorted(set(pol.env_allow) | set(server.env_declared)))
+        argv = server.launch_command()
+        print(f"warden: MCP server '{server.name}' as principal 'mcp:{server.name}', "
+              f"policy '{pol.name}', enforcing", file=sys.stderr)
+        return run(argv, pol, enforce=True, subject=mcp.subject_for(server),
+                   env_overrides=mcp.resolve_env(server), enable_mcp_broker=False)
+
+    # wrap / unwrap
+    if not args.config:
+        raise SystemExit("warden: --config <file> is required for wrap/unwrap.")
+    doc, _servers = mcp.parse_config(args.config)
+    new_doc, changed = mcp.transform_config(
+        doc, wrap=(args.mcp_cmd == "wrap"), config=args.config)
+    verb = "wrapped" if args.mcp_cmd == "wrap" else "unwrapped"
+    if not changed:
+        print(f"warden: nothing to {args.mcp_cmd} in {args.config} "
+              f"(stdio servers already {verb}, or none present).", file=sys.stderr)
+        return 0
+    rendered = json.dumps(new_doc, indent=2) + "\n"
+    if args.write:
+        backup = mcp.write_config_atomic(args.config, rendered)
+        print(f"warden: {verb} {len(changed)} server(s) in {args.config} "
+              f"({', '.join(changed)}). Backup: {backup.name}", file=sys.stderr)
+    else:
+        print(rendered, end="")
+        print(f"warden: would {args.mcp_cmd} {len(changed)} server(s): {', '.join(changed)}. "
+              "Re-run with --write to apply (a .bak backup is kept).", file=sys.stderr)
+    return 0
+
+
+def cmd_registry(args, _child):
+    import json
+    import re
+    from . import behavior, registry
+
+    if args.registry_cmd == "trust":
+        if args.list:
+            keys = registry.trusted_keys()
+            if not keys:
+                print("No trusted registry keys. Add one with: warden registry trust <pubkey>")
+                return 0
+            for k in keys:
+                print(f"{k['public_key']}  {k.get('label','') or '—'}")
+            return 0
+        if not args.key:
+            print("warden: provide a public key to trust, or --list.", file=sys.stderr)
+            return 2
+        if args.remove:
+            removed = registry.untrust_key(args.key)
+            print("removed" if removed else "not found")
+            return 0 if removed else 1
+        record = registry.trust_key(args.key, args.label or "")
+        print(f"TRUSTED  {record['public_key']}  {record.get('label','') or '—'}")
+        print("Entries signed by this key can now be installed.")
+        return 0
+
+    if args.registry_cmd == "publish":
+        baseline = behavior.load_baseline(args.name)
+        provenance = {"reviewer": args.reviewer or "", "source": args.source or "",
+                      "notes": args.notes or ""}
+        policy = None
+        if args.policy:
+            from .policy import load as load_policy
+            policy = load_policy(args.policy).to_dict()
+        entry = registry.entry_from_baseline(baseline, provenance, policy=policy)
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "-", entry["subject"]["name"]).strip("-.") or "entry"
+        out = Path(args.out) if args.out else registry.entries_dir() / f"{slug}.json"
+        registry.publish(entry, out)
+        print(f"PUBLISHED  {entry['subject']['kind']}:{entry['subject']['name']}")
+        print(f"signed by {entry['signature']['public_key']}")
+        print(f"written to {out}")
+        print("Share this file (e.g. open a PR to a registry repo); others trust your key to use it.")
+        return 0
+
+    if args.registry_cmd in ("verify", "list"):
+        entries = registry.load_entries(args.paths or None)
+        if not entries:
+            print("No registry entries found.", file=sys.stderr)
+            return 1
+        if args.registry_cmd == "list" and args.json:
+            print(json.dumps([{k: v for k, v in e.items() if k != "signature"} for e in entries],
+                             indent=2, sort_keys=True))
+            return 0
+        print(f"{'SUBJECT':<30} {'CAPS':<5} {'SIGNER':<16} STATUS")
+        print("-" * 78)
+        bad = 0
+        for e in entries:
+            subj = e.get("subject", {})
+            ok, reason, signer = registry.entry_trust(e)
+            if not ok and "not trusted" not in reason and "trusted" not in reason:
+                bad += 1
+            caps = sum(len(e.get("capabilities", {}).get(c, [])) for c in registry.CATEGORIES)
+            status = "trusted" if ok else ("UNTRUSTED" if signer else "INVALID")
+            name = f"{subj.get('kind','?')}:{subj.get('name','?')}"
+            print(f"{name[:29]:<30} {caps:<5} {(signer[:14] + '…') if signer else '—':<16} {status}")
+        return 1 if bad else 0
+
+    if args.registry_cmd == "install":
+        entry = registry.find_entry(args.name, kind=args.kind, paths=args.source or None)
+        if not entry:
+            raise SystemExit(f"warden: no registry entry named '{args.name}' in the given source(s).")
+        baseline, path = registry.install(entry, force=args.force)
+        print(f"INSTALLED  {baseline['name']}  (state: registry)")
+        print(f"provenance: signer {baseline['provenance']['registry_signer'][:12]}…"
+              f" reviewer '{baseline['provenance'].get('reviewer','')}'")
+        print(f"stored at {path}")
+        print("Drift for this subject now compares against the community baseline.")
+        if args.policy_out:
+            if not entry.get("policy"):
+                print("warden: this entry carries no reviewed policy.", file=sys.stderr)
+                return 1
+            Path(args.policy_out).write_text(json.dumps(entry["policy"], indent=2), encoding="utf-8")
+            print(f"reviewed policy written to {args.policy_out} — use: warden run --policy {args.policy_out}")
+        return 0
+    return 0
+
+
 def cmd_scan(args, _child):
     from . import scanner, scan_report
 
@@ -318,10 +721,36 @@ def cmd_gate(args, _child):
         failures.append(f"{s['blocked_count']} egress destination(s) were blocked")
     if not s["integrity_ok"]:
         failures.append("session log integrity check failed")
+    behavior_diff = None
+    if args.baseline or args.fail_on_new is not None:
+        from . import behavior
+        manifest = behavior.build_manifest(s)
+        reference = args.baseline or behavior.default_baseline_name(manifest)
+        baseline = behavior.load_baseline(reference)
+        behavior_diff = behavior.diff(manifest, baseline)
+        requested = args.fail_on_new
+        if requested is not None:
+            categories = set(behavior.CATEGORIES) if requested == "all" else {
+                part.strip() for part in requested.split(",") if part.strip()
+            }
+            unknown = categories - set(behavior.CATEGORIES)
+            if unknown:
+                raise behavior.BehaviorError(
+                    "unknown capability category: " + ", ".join(sorted(unknown)))
+            count = sum(len(behavior_diff["new"].get(category, [])) for category in categories)
+            if count:
+                failures.append(
+                    f"{count} new behavior capability(s) in {', '.join(sorted(categories))}")
+            if behavior_diff["identity_changes"]:
+                failures.append(f"{len(behavior_diff['identity_changes'])} runtime/policy identity change(s)")
     print(f"warden gate: risk {risk['score']}/100 ({risk['level']}), "
           f"{s['blocked_count']} blocked, {s.get('warned_count', 0)} warned")
     for r in risk["reasons"]:
         print(f"  - {r}")
+    if behavior_diff is not None:
+        print(f"warden gate: behavior {behavior_diff['status']}, "
+              f"{behavior_diff['new_count']} new, "
+              f"severity {behavior_diff['highest_severity']}")
     if failures:
         print("GATE FAILED:", file=sys.stderr)
         for f in failures:
@@ -388,10 +817,26 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--policy", help="policy file; overrides the agent/default policy")
     r.add_argument("--strict", action="store_true",
                    help="strict filesystem: deny all writes outside the allow-list")
+    r.add_argument("--strict-read", action="store_true",
+                   help="confine reads: deny the user's home except the read allow-list "
+                        "(project + agent config); system paths stay readable")
     r.add_argument("--deep", action="store_true",
                    help="comprehensive file/process recording via eslogger (needs sudo + Full Disk Access)")
     r.add_argument("--deep-files", action="store_true",
                    help="with --deep, also record every file open (high volume)")
+    r.add_argument("--allow-record-fallback", action="store_true",
+                   help="if OS enforcement is unavailable, explicitly fall back to proxy-only recording")
+    r.add_argument("--subject",
+                   help="behavioral principal for this run (e.g. mcp:github), so its baseline "
+                        "and drift are tracked apart from the launching agent")
+    r.add_argument("--mcp-config", action="append", default=[],
+                   help="pre-register an additional wrapped MCP config with the parent broker "
+                        "(repeatable; standard config locations are automatic)")
+    kc = r.add_mutually_exclusive_group()
+    kc.add_argument("--allow-keychain", action="store_true",
+                    help="let the run read the macOS Keychain (needed by agents that log in there)")
+    kc.add_argument("--deny-keychain", action="store_true",
+                    help="seal the macOS Keychain even for an agent that authenticates through it")
     r.set_defaults(func=cmd_run)
 
     rec = sub.add_parser("record", help="record only, no enforcement")
@@ -428,6 +873,105 @@ def build_parser() -> argparse.ArgumentParser:
     rk.add_argument("log", nargs="?")
     rk.set_defaults(func=cmd_risk)
 
+    beh = sub.add_parser("behavior", help="emit a versioned capability manifest for a session")
+    beh.add_argument("log", nargs="?", help="session log/path/id; defaults to latest")
+    beh.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    beh.add_argument("--out", help="write the JSON manifest to a file")
+    beh.set_defaults(func=cmd_behavior)
+
+    base = sub.add_parser("baseline", help="manage explicitly approved, signed behavior")
+    base_sub = base.add_subparsers(dest="baseline_cmd", required=True)
+    base_list = base_sub.add_parser("list", help="list approved baselines")
+    base_list.add_argument("--json", action="store_true")
+    base_list.set_defaults(func=cmd_baseline)
+    base_approve = base_sub.add_parser("approve", help="approve a session as trusted behavior")
+    base_approve.add_argument("log", nargs="?", help="session log/path/id; defaults to latest")
+    base_approve.add_argument("--name", help="stable baseline name; defaults to agent/command identity")
+    base_approve.add_argument("--force", action="store_true",
+                              help="replace an existing baseline with this signed approval")
+    base_approve.set_defaults(func=cmd_baseline)
+    base_show = base_sub.add_parser("show", help="inspect an approved baseline")
+    base_show.add_argument("name", help="baseline name or JSON path")
+    base_show.add_argument("--json", action="store_true")
+    base_show.set_defaults(func=cmd_baseline)
+    base_verify = base_sub.add_parser("verify", help="verify a baseline's signature")
+    base_verify.add_argument("name", help="baseline name or JSON path")
+    base_verify.add_argument("--pubkey", help="require this Ed25519 public key")
+    base_verify.set_defaults(func=cmd_baseline)
+
+    dif = sub.add_parser("diff", help="compare a session with approved behavior")
+    dif.add_argument("log", nargs="?", help="session log/path/id; defaults to latest")
+    dif.add_argument("--baseline", help="baseline name/path; defaults to the session identity")
+    dif.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    dif.add_argument("--exit-code", action="store_true", help="exit 1 when drift is present")
+    dif.set_defaults(func=cmd_diff)
+
+    mc = sub.add_parser("mcp", help="run each MCP server as its own confined, baselined principal")
+    mcp_sub = mc.add_subparsers(dest="mcp_cmd", required=True)
+    mcp_list = mcp_sub.add_parser("list", help="discover configured MCP servers")
+    mcp_list.add_argument("--config", help="an explicit MCP config file to read")
+    mcp_list.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    mcp_list.set_defaults(func=cmd_mcp)
+    mcp_run = mcp_sub.add_parser("run", help="run one MCP server as principal mcp:<name>")
+    mcp_run.add_argument("name", help="the configured server name")
+    mcp_run.add_argument("--config", help="an explicit MCP config file to read")
+    mcp_run.add_argument("--policy", help="policy file; overrides the MCP baseline")
+    mcp_run.set_defaults(func=cmd_mcp)
+    mcp_shim = mcp_sub.add_parser("shim", help="internal stdio bridge used by wrapped configs")
+    mcp_shim.add_argument("name")
+    mcp_shim.add_argument("--config", required=True)
+    mcp_shim.add_argument("--definition", required=True)
+    mcp_shim.set_defaults(func=cmd_mcp)
+    mcp_serve = mcp_sub.add_parser("_serve", help="internal parent-broker launcher")
+    mcp_serve.add_argument("--grant", required=True)
+    mcp_serve.set_defaults(func=cmd_mcp)
+    mcp_bridge = mcp_sub.add_parser("_bridge", help="internal stdio-to-remote MCP bridge")
+    mcp_bridge.add_argument("--url", required=True)
+    mcp_bridge.add_argument("--transport", default="streamable-http",
+                            choices=["streamable-http", "sse"])
+    mcp_bridge.set_defaults(func=cmd_mcp)
+
+    reg = sub.add_parser("registry",
+                         help="share/adopt signed, reviewed behavior baselines for MCP servers & skills")
+    reg_sub = reg.add_subparsers(dest="registry_cmd", required=True)
+    reg_trust = reg_sub.add_parser("trust", help="trust a publisher key (or --list / --remove)")
+    reg_trust.add_argument("key", nargs="?", help="64-hex Ed25519 public key")
+    reg_trust.add_argument("--label", help="a human label for this key")
+    reg_trust.add_argument("--list", action="store_true", help="list trusted keys")
+    reg_trust.add_argument("--remove", action="store_true", help="stop trusting this key")
+    reg_trust.set_defaults(func=cmd_registry)
+    reg_pub = reg_sub.add_parser("publish", help="sign a reviewed local baseline as a shareable entry")
+    reg_pub.add_argument("name", help="an approved baseline name (see: warden baseline list)")
+    reg_pub.add_argument("--out", help="write the entry here (default: local registry)")
+    reg_pub.add_argument("--reviewer", help="who reviewed this")
+    reg_pub.add_argument("--source", help="URL/reference for the review")
+    reg_pub.add_argument("--notes", help="review notes")
+    reg_pub.add_argument("--policy", help="include a reviewed least-privilege policy file")
+    reg_pub.set_defaults(func=cmd_registry)
+    reg_verify = reg_sub.add_parser("verify", help="verify entries' signatures and trust status")
+    reg_verify.add_argument("paths", nargs="*", help="entry files/dirs (default: local registry)")
+    reg_verify.set_defaults(func=cmd_registry)
+    reg_list = reg_sub.add_parser("list", help="list registry entries")
+    reg_list.add_argument("paths", nargs="*", help="entry files/dirs (default: local registry)")
+    reg_list.add_argument("--json", action="store_true")
+    reg_list.set_defaults(func=cmd_registry)
+    reg_install = reg_sub.add_parser("install", help="adopt a trusted entry as a local baseline")
+    reg_install.add_argument("name", help="the subject name to install")
+    reg_install.add_argument("--kind", help="disambiguate by kind (mcp, skill, agent, command)")
+    reg_install.add_argument("--from", dest="source", action="append",
+                             help="entry file/dir to install from (repeatable)")
+    reg_install.add_argument("--policy-out", help="also write the entry's reviewed policy here")
+    reg_install.add_argument("--force", action="store_true", help="replace an existing baseline")
+    reg_install.set_defaults(func=cmd_registry)
+    mcp_wrap = mcp_sub.add_parser("wrap", help="rewrite a config so each server launches through Warden")
+    mcp_wrap.add_argument("--config", required=True, help="the MCP config file to rewrite")
+    mcp_wrap.add_argument("--write", action="store_true", help="apply in place (keeps a .bak backup)")
+    mcp_wrap.set_defaults(func=cmd_mcp)
+    mcp_unwrap = mcp_sub.add_parser("unwrap", help="revert a wrapped config to direct launches")
+    mcp_unwrap.add_argument("--config", required=True, help="the MCP config file to restore")
+    mcp_unwrap.add_argument("--write", action="store_true", help="apply in place (keeps a .bak backup)")
+    mcp_unwrap.set_defaults(func=cmd_mcp)
+
     sc = sub.add_parser("scan", help="batch-scan a corpus of skills; produce a shareable finding")
     sc.add_argument("corpus", help="a directory whose subdirectories are skills")
     sc.add_argument("--html", help="write a shareable HTML finding to this path")
@@ -443,6 +987,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("log", nargs="?")
     g.add_argument("--max-risk", type=int, default=40, help="fail if risk exceeds this (default 40)")
     g.add_argument("--fail-on-blocked", action="store_true", help="also fail if any egress was blocked")
+    g.add_argument("--baseline", help="approved behavior name/path to compare")
+    g.add_argument("--fail-on-new", nargs="?", const="all",
+                   metavar="CATEGORIES",
+                   help="fail on new behavior (all, or comma-separated network,process,"
+                        "filesystem,ipc,credential)")
     g.set_defaults(func=cmd_gate)
 
     rep = sub.add_parser("report", help="show what a session did")
@@ -467,6 +1016,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     from .policy import PolicyError
+    from .behavior import BehaviorError
 
     argv = list(sys.argv[1:] if argv is None else argv)
     warden_args, child = _split_cmd(argv)
@@ -479,8 +1029,14 @@ def main(argv: list[str] | None = None) -> int:
         print("  (policies use a minimal YAML subset; use block style, not "
               "inline {..} maps. See examples/demo.policy.yaml)", file=sys.stderr)
         return 2
+    except BehaviorError as exc:
+        print(f"warden: behavior error — {exc}", file=sys.stderr)
+        return 2
     except FileNotFoundError as exc:
         print(f"warden: file not found — {exc}", file=sys.stderr)
+        return 2
+    except (ValueError, RuntimeError) as exc:
+        print(f"warden: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         return 130

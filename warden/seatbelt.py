@@ -121,7 +121,8 @@ def _quote(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def compile_profile(policy: Policy, proxy_port: int | None = None) -> str:
+def compile_profile(policy: Policy, proxy_port: int | None = None,
+                    broker_port: int | None = None) -> str:
     """Return an SBPL profile string enforcing `policy`."""
     lines: list[str] = [
         "(version 1)",
@@ -157,6 +158,25 @@ def compile_profile(policy: Policy, proxy_port: int | None = None) -> str:
             real = canonical(raw)
             lines.append(f"(deny file-write* {_sbpl_subpath(real)}) ;; strict re-deny {raw}")
 
+    # Strict reads: confine reads under the user's home to the read allow-list.
+    # System paths (/usr, /System, /Library, …) stay readable so the agent runs;
+    # the user's other data (~/Documents, other repos, browser profiles) does not.
+    if policy.strict_read:
+        home = os.path.expanduser("~")
+        lines.append("")
+        lines.append(";; --- strict reads: deny home reads, re-allow the read allow-list ---")
+        lines.append(f'(deny file-read* (subpath {_quote(home)}))')
+        for raw in policy.filesystem.read:
+            real = canonical(raw)
+            # Only re-allow paths under home; system paths are already allowed.
+            if real.startswith(home):
+                lines.append(f"(allow file-read* {_sbpl_subpath(real)}) ;; {raw}")
+        # Re-assert secret read denials last so a broad re-allow can't reopen them.
+        for raw in policy.filesystem.deny:
+            real = canonical(raw)
+            if real.startswith(home):
+                lines.append(f"(deny file-read* {_sbpl_subpath(real)}) ;; strict re-deny {raw}")
+
     lines.append("")
     lines.append(";; --- process denials ---")
     for name in policy.process.deny:
@@ -167,12 +187,20 @@ def compile_profile(policy: Policy, proxy_port: int | None = None) -> str:
     lines.append("")
     lines.append(";; --- network ---")
     if policy.network.deny_all_other:
-        # Lock egress to loopback so all real traffic must traverse the Warden
-        # proxy (which enforces the host list). Everything else fails closed.
+        # Pin egress to the Warden proxy ONLY — a single loopback port. This
+        # forces all real traffic through the recording proxy and, unlike a
+        # blanket localhost allow, does NOT expose other local services (a
+        # Postgres on 5432, a Docker/SSH-agent unix socket, etc.). Unix-domain
+        # sockets are denied outright for the same reason.
         lines.append("(deny network-outbound)")
-        lines.append('(allow network-outbound (remote ip "localhost:*"))')
-        lines.append('(allow network-outbound (remote unix-socket))')
-        lines.append("(allow network-bind (local ip))")
+        if proxy_port:
+            lines.append(f'(allow network-outbound (remote ip "localhost:{int(proxy_port)}"))')
+        else:
+            lines.append('(allow network-outbound (remote ip "localhost:*"))')
+        if broker_port:
+            # A wrapped MCP shim reaches only this parent-owned authenticated
+            # endpoint; other loopback services stay inaccessible.
+            lines.append(f'(allow network-outbound (remote ip "localhost:{int(broker_port)}"))')
     else:
         lines.append("(allow network*)")
 

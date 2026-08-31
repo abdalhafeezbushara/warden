@@ -19,8 +19,8 @@ matching the documented recording assumption.
 
 bwrap runs unprivileged via user namespaces. Where a hardened distro disables
 those (e.g. Ubuntu's AppArmor userns restriction), bwrap fails and Warden
-degrades to record-only with a clear message — never a silent false sense of
-enforcement.
+refuses to start an enforced child. Proxy-only fallback requires an explicit
+`--allow-record-fallback` opt-in — never a silent false sense of enforcement.
 
 This module only *generates* the command (fully unit-tested); running it is the
 job of the runner on a Linux host and of CI.
@@ -37,6 +37,34 @@ from .policy import Policy
 
 def bubblewrap_available() -> bool:
     return shutil.which("bwrap") is not None
+
+
+_bwrap_works_cache: bool | None = None
+
+
+def bubblewrap_works() -> bool:
+    """bwrap is present AND can actually create the namespaces it needs (cached).
+
+    On default Docker and some hardened distros (Ubuntu's AppArmor restriction,
+    userns sysctl off) unprivileged user namespaces are disabled and bwrap fails
+    at `Creating new namespace`. Probing here lets Warden report honestly instead
+    of dying with a cryptic error mid-run."""
+    global _bwrap_works_cache
+    if _bwrap_works_cache is not None:
+        return _bwrap_works_cache
+    if not bubblewrap_available():
+        _bwrap_works_cache = False
+        return False
+    import subprocess
+
+    try:
+        r = subprocess.run(["bwrap", "--ro-bind", "/", "/", "--unshare-user",
+                            "--unshare-net", "--", "/bin/true"],
+                           capture_output=True, timeout=10)
+        _bwrap_works_cache = r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        _bwrap_works_cache = False
+    return _bwrap_works_cache
 
 
 def _expand(path: str) -> str:
@@ -84,6 +112,17 @@ def bwrap_command(policy: Policy, argv: list[str], proxy_port: int | None = None
         cmd += ["--ro-bind", "/", "/"]
 
     cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+
+    # Enforce filesystem.read on Linux. In strict-fs the root starts empty, so
+    # explicit read roots must be mounted. Otherwise overlay the real home with
+    # an empty tmpfs, then reveal only the declared read roots beneath it.
+    if policy.strict_read and not policy.strict_fs:
+        cmd += ["--tmpfs", _real(os.path.expanduser("~"))]
+    if policy.strict_read or policy.strict_fs:
+        for readable in policy.filesystem.read:
+            real = _real(_deny_root(readable))
+            if os.path.exists(real):
+                cmd += ["--ro-bind", real, real]
 
     # Writable trees.
     for w in policy.filesystem.write:

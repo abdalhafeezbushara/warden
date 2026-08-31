@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 
 
@@ -38,6 +38,9 @@ class NetworkRules:
     allow: list[str] = field(default_factory=list)
     deny: list[str] = field(default_factory=list)
     deny_all_other: bool = True
+    # Reject loopback, private, link-local, reserved, and multicast destinations
+    # even when their hostname is allowed. Opt in only for an internal service.
+    allow_private: bool = False
 
 
 @dataclass
@@ -58,6 +61,15 @@ class Policy:
     # of the default allow-writes-but-deny-secrets). Stricter; opt-in because it
     # can break agents that write to unexpected caches.
     strict_fs: bool = False
+    # When true, confine READS: deny everything under the user's home except the
+    # read allow-list (project + agent config). System paths stay readable so the
+    # agent still works. This is what makes `filesystem.read` actually enforced —
+    # the agent can no longer read ~/Documents, other projects, browser data, etc.
+    strict_read: bool = False
+    # Extra environment-variable NAMES to pass through to the child, on top of a
+    # safe base set. Everything not on the base set or here is scrubbed, so shell
+    # secrets (AWS_*, GITHUB_TOKEN, DB creds) never reach the agent by default.
+    env_allow: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -82,6 +94,40 @@ DEFAULT_SECRET_DENY = [
     "~/Library/Keychains/**",
 ]
 
+# The macOS login keychain. Denied by default (it holds every app's saved
+# passwords and tokens), but some agents store their OWN login session here and
+# cannot authenticate without it — cursor-agent is the known case. For those we
+# open exactly this path and nothing else; see apply_keychain below.
+KEYCHAIN_GLOB = "~/Library/Keychains/**"
+
+
+def apply_keychain(policy: Policy, allow: bool) -> Policy:
+    """Return a copy of ``policy`` with macOS Keychain access toggled.
+
+    Warden denies the keychain by default so an agent can't read the user's other
+    saved secrets. But an agent that keeps its *own* login session in the keychain
+    (cursor-agent) then can't authenticate at all. ``allow=True`` removes the
+    keychain from the deny-list and adds it to the read/write allow-lists so the
+    agent reaches it even under ``--strict-read``/``--strict-fs``; everything else
+    in the secret deny-list (``~/.ssh``, ``~/.aws``, ``.env`` …) still stands.
+    ``allow=False`` re-seals it. Idempotent either way.
+    """
+    fs = policy.filesystem
+    deny = [d for d in fs.deny if d != KEYCHAIN_GLOB]
+    read = [r for r in fs.read if r != KEYCHAIN_GLOB]
+    write = [w for w in fs.write if w != KEYCHAIN_GLOB]
+    if allow:
+        read.append(KEYCHAIN_GLOB)
+        write.append(KEYCHAIN_GLOB)
+    else:
+        deny.append(KEYCHAIN_GLOB)
+    return replace(policy, filesystem=replace(fs, deny=deny, read=read, write=write))
+
+
+def keychain_allowed(policy: Policy) -> bool:
+    """True when the effective policy does NOT deny the macOS Keychain."""
+    return not any("Library/Keychains" in d for d in policy.filesystem.deny)
+
 
 def default_policy(workdir: str | os.PathLike[str] | None = None) -> Policy:
     """A sensible starting policy: work in the project dir, reach common
@@ -91,7 +137,11 @@ def default_policy(workdir: str | os.PathLike[str] | None = None) -> Policy:
         name="default",
         description="Warden default: project-scoped filesystem, allow-listed egress, secrets denied.",
         filesystem=FilesystemRules(
-            read=[workdir + "/**", "~/.gitconfig", "~/.config/git/**"],
+            # Generous enough that --strict-read still lets an agent run: the
+            # project, plus the common per-user config/cache dirs tools read.
+            read=[workdir + "/**", "~/.gitconfig", "~/.config/**", "~/.cache/**",
+                  "~/.local/**", "~/.npm/**", "~/.npm-global/**", "~/.nvm/**", "~/.pyenv/**",
+                  "~/.rustup/**", "~/.cargo/**"],
             write=[workdir + "/**", "/tmp/**", "/private/tmp/**"],
             deny=list(DEFAULT_SECRET_DENY),
         ),
@@ -106,6 +156,7 @@ def default_policy(workdir: str | os.PathLike[str] | None = None) -> Policy:
             ],
             deny=[],
             deny_all_other=True,
+            allow_private=False,
         ),
         process=ProcessRules(deny=["ssh", "scp", "aws", "gcloud", "kubectl"]),
         on_violation="block+receipt",
@@ -278,11 +329,17 @@ def loads(text: str) -> Policy:
             allow=_as_list(net.get("allow")),
             deny=_as_list(net.get("deny")),
             deny_all_other=bool(deny_all) if isinstance(deny_all, bool) else str(deny_all).lower() != "false",
+            allow_private=(bool(net.get("allow_private", False))
+                           if isinstance(net.get("allow_private", False), bool)
+                           else str(net.get("allow_private")).lower() == "true"),
         ),
         process=ProcessRules(deny=_as_list(proc.get("deny"))),
         on_violation=on_violation,
         strict_fs=bool(data.get("strict_fs", False)) if isinstance(data.get("strict_fs", False), bool)
         else str(data.get("strict_fs")).lower() == "true",
+        strict_read=bool(data.get("strict_read", False)) if isinstance(data.get("strict_read", False), bool)
+        else str(data.get("strict_read")).lower() == "true",
+        env_allow=_as_list(data.get("env_allow")),
     )
 
 
@@ -314,6 +371,7 @@ def to_yaml(policy: Policy) -> str:
     lines.append("  allow:" + _yaml_list(p.network.allow, "    "))
     lines.append("  deny:" + _yaml_list(p.network.deny, "    "))
     lines.append(f"  deny_all_other: {'true' if p.network.deny_all_other else 'false'}")
+    lines.append(f"  allow_private: {'true' if p.network.allow_private else 'false'}")
     lines.append("")
     lines.append("process:")
     lines.append("  deny:" + _yaml_list(p.process.deny, "    "))
@@ -321,4 +379,8 @@ def to_yaml(policy: Policy) -> str:
     lines.append(f"on_violation: {p.on_violation}")
     if p.strict_fs:
         lines.append("strict_fs: true")
+    if p.strict_read:
+        lines.append("strict_read: true")
+    if p.env_allow:
+        lines.append("env_allow:" + _yaml_list(p.env_allow, "  "))
     return "\n".join(lines) + "\n"

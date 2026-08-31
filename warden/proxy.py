@@ -19,6 +19,7 @@ Deny always wins over allow.
 from __future__ import annotations
 
 import fnmatch
+import ipaddress
 import select
 import socket
 import threading
@@ -41,6 +42,7 @@ class _Decision:
     def __init__(self, policy, cache=None):
         self.allow = list(policy.network.allow)
         self.deny = list(policy.network.deny)
+        self.allow_private = bool(getattr(policy.network, "allow_private", False))
         # In 'warn' mode a would-be-denied host is recorded but let through — a
         # monitor mode for teams adopting Warden before they tighten the list.
         self.warn_mode = policy.on_violation == "warn"
@@ -100,7 +102,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._refuse(host)
             return
         try:
-            upstream = socket.create_connection((host, port), timeout=10)
+            upstream = _connect_upstream(host, port, self.server.decision.allow_private)
         except OSError as exc:
             self.send_error(502, f"upstream error: {exc}")
             return
@@ -138,7 +140,7 @@ class _Handler(BaseHTTPRequestHandler):
         # Minimal forward proxy for plain HTTP.
         port = parts.port or 80
         try:
-            upstream = socket.create_connection((host, port), timeout=10)
+            upstream = _connect_upstream(host, port, self.server.decision.allow_private)
         except OSError as exc:
             self.send_error(502, f"upstream error: {exc}")
             return
@@ -220,3 +222,39 @@ def start_proxy(recorder, policy, cache=None) -> ProxyServer:
     server = ProxyServer(recorder, policy, cache=cache)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
+
+
+def _address_allowed(address: str, allow_private: bool) -> bool:
+    """Whether a resolved address is safe for the proxy to dial.
+
+    Connecting to a validated IP, rather than resolving again afterward, also
+    closes the DNS-rebinding/TOCTOU path to localhost and cloud metadata.
+    """
+    if allow_private:
+        return True
+    try:
+        return ipaddress.ip_address(address.split("%", 1)[0]).is_global
+    except ValueError:
+        return False
+
+
+def _connect_upstream(host: str, port: int, allow_private: bool = False) -> socket.socket:
+    """Resolve once, reject non-public destinations, then dial the validated IP."""
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    last_error: OSError | None = None
+    rejected = 0
+    for family, socktype, proto, _, sockaddr in infos:
+        if not _address_allowed(sockaddr[0], allow_private):
+            rejected += 1
+            continue
+        upstream = socket.socket(family, socktype, proto)
+        upstream.settimeout(10)
+        try:
+            upstream.connect(sockaddr)
+            return upstream
+        except OSError as exc:
+            last_error = exc
+            upstream.close()
+    if rejected and rejected == len(infos):
+        raise OSError("destination resolves only to private or non-routable addresses")
+    raise last_error or OSError("no usable address for upstream host")

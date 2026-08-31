@@ -14,8 +14,10 @@ acknowledge within a few days.
 
 ## Scope and threat model
 
-Warden's job is to contain and record an AI coding agent running on a developer
-machine. In scope:
+The full analysis — trust boundaries, adversary model, threat-by-threat
+mitigations, and a residual-risk register — is in
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). In brief, Warden's job is to
+contain and record an AI coding agent running on a developer machine. In scope:
 
 - **Enforcement bypass** — any way a process under `warden run` reads a denied
   path, execs a denied binary, or reaches the network off the recorded path.

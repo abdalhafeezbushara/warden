@@ -1,0 +1,33 @@
+{
+  "capabilities": {
+    "credential": [],
+    "filesystem": [],
+    "ipc": [],
+    "network": [],
+    "process": []
+  },
+  "coverage": {
+    "credentials": true,
+    "deep": false,
+    "network": "hard"
+  },
+  "provenance": {
+    "notes": "Filesystem MCP server: no network egress expected; scope its reads/writes with a policy.",
+    "reviewed_at": 1788196668.367,
+    "reviewer": "warden-maintainers",
+    "source": "https://github.com/abdalhafeezbushara/warden-registry",
+    "warden_version": "0.2.0"
+  },
+  "schema": "warden.registry-entry/v1",
+  "signature": {
+    "algorithm": "ed25519",
+    "payload_sha256": "8e766dff0281e45883c2ab6eb06cf3d73316c878f8e3d7e26617bdec3fc53b74",
+    "public_key": "77308524a868d0d6c838ad8bd8a02d89f79f79bd6daae9fedaa0223fe4a6a335",
+    "value": "923506c6d2ddf19a81d9a9ba15b95d3c39e822ef60b80ff7608a1be458eec15f35954edc20d4bf482a73568b3091c0db3ccce688c78b705b523364573b300909"
+  },
+  "subject": {
+    "definition_sha256": null,
+    "kind": "mcp",
+    "name": "@modelcontextprotocol/server-filesystem"
+  }
+}

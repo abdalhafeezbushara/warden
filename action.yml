@@ -18,6 +18,13 @@ inputs:
     description: "Also fail if any egress destination was blocked."
     required: false
     default: "true"
+  behavior-baseline:
+    description: "Path/name of an approved signed behavior baseline (optional)."
+    required: false
+  fail-on-new:
+    description: "Behavior categories to reject: all or comma-separated network,process,filesystem,ipc,credential."
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -32,13 +39,46 @@ runs:
       run: python -m pip install "${{ github.action_path }}"
     - name: Run under Warden
       shell: bash
+      env:
+        WARDEN_ACTION_COMMAND: "${{ inputs.command }}"
+        WARDEN_ACTION_POLICY: "${{ inputs.policy }}"
       run: |
-        POLICY_ARG=""
-        if [ -n "${{ inputs.policy }}" ]; then POLICY_ARG="--policy ${{ inputs.policy }}"; fi
-        warden run $POLICY_ARG -- ${{ inputs.command }} || true
+        POLICY_ARGS=()
+        if [ -n "$WARDEN_ACTION_POLICY" ]; then
+          POLICY_ARGS=(--policy "$WARDEN_ACTION_POLICY")
+        fi
+        # Capture the command's real exit code (do NOT mask it) so a failing
+        # build step still fails the job — the gate runs regardless below.
+        set +e
+        warden run "${POLICY_ARGS[@]}" -- bash -lc "$WARDEN_ACTION_COMMAND"
+        echo "warden_cmd_exit=$?" >> "$GITHUB_ENV"
     - name: Gate on egress and risk
       shell: bash
+      env:
+        WARDEN_ACTION_FAIL_BLOCKED: "${{ inputs.fail-on-blocked }}"
+        WARDEN_ACTION_MAX_RISK: "${{ inputs.max-risk }}"
+        WARDEN_ACTION_BASELINE: "${{ inputs.behavior-baseline }}"
+        WARDEN_ACTION_FAIL_NEW: "${{ inputs.fail-on-new }}"
       run: |
-        FAIL_ARG=""
-        if [ "${{ inputs.fail-on-blocked }}" = "true" ]; then FAIL_ARG="--fail-on-blocked"; fi
-        warden gate --max-risk ${{ inputs.max-risk }} $FAIL_ARG
+        FAIL_ARGS=()
+        if [ "$WARDEN_ACTION_FAIL_BLOCKED" = "true" ]; then
+          FAIL_ARGS=(--fail-on-blocked)
+        fi
+        BEHAVIOR_ARGS=()
+        if [ -n "$WARDEN_ACTION_BASELINE" ]; then
+          BEHAVIOR_ARGS+=(--baseline "$WARDEN_ACTION_BASELINE")
+        fi
+        if [ -n "$WARDEN_ACTION_FAIL_NEW" ]; then
+          BEHAVIOR_ARGS+=(--fail-on-new "$WARDEN_ACTION_FAIL_NEW")
+        fi
+        # Composite steps run with -e; disable it so both exit codes can be
+        # collected before deciding the final result.
+        set +e
+        warden gate --max-risk "$WARDEN_ACTION_MAX_RISK" \
+          "${FAIL_ARGS[@]}" "${BEHAVIOR_ARGS[@]}"
+        gate=$?
+        cmd="${warden_cmd_exit:-0}"
+        if [ "$cmd" -ne 0 ]; then
+          echo "::error::the command exited $cmd"; exit "$cmd"
+        fi
+        exit "$gate"

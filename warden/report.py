@@ -44,15 +44,39 @@ def build_report(path: str | Path) -> str:
     argv = " ".join(start.get("argv", []))
     enforce = start.get("enforce")
     agent = start.get("agent")
+    degraded = any(r["event"]["kind"] == "enforce.unavailable" for r in records)
+    compiled = next((r["event"]["data"] for r in records
+                     if r["event"]["kind"] == "policy.compiled"), {})
+    backend = compiled.get("backend")
+    keychain = next((r["event"]["data"] for r in records
+                     if r["event"]["kind"] == "policy.keychain"), None)
+    env_allowed = next((r["event"]["data"].get("names", []) for r in records
+                        if r["event"]["kind"] == "env.allowed"), [])
+    mcp_remote = [r["event"]["data"] for r in records
+                  if r["event"]["kind"] == "mcp.remote.declared"]
 
     lines = []
     lines.append("╭─ Warden flight report ─────────────────────────────────")
     if agent:
         lines.append(f"│ agent   : {agent}")
     lines.append(f"│ command : {argv}")
-    mode = "ENFORCE (filesystem + process + egress contained)" if enforce \
-        else "OBSERVE (no fs/process sandbox; egress still contained)"
+    if degraded:
+        mode = "DEGRADED (enforcement unavailable)"
+    elif enforce and backend == "seatbelt":
+        mode = "ENFORCE (filesystem + process + hard egress pin)"
+    elif enforce:
+        mode = "ENFORCE (filesystem + process; proxy-observed egress)"
+    else:
+        mode = "OBSERVE (no OS sandbox; proxy-honoring egress only)"
     lines.append(f"│ policy  : {start.get('policy','?')}   mode: {mode}")
+    if keychain is not None and keychain.get("readable"):
+        lines.append("│ keychain: READABLE (agent authenticates via macOS Keychain; "
+                     "other secrets denied)")
+    if env_allowed:
+        lines.append(f"│ credentials available by name: {', '.join(env_allowed)}")
+    if mcp_remote:
+        names = ", ".join(sorted({f"{m['name']}→{m['host']}" for m in mcp_remote}))
+        lines.append(f"│ remote MCP (allow-listed, recorded, NOT sandboxed): {names}")
     lines.append(f"│ exit    : {meta['exit'].get('code','?')}   duration: {meta['exit'].get('duration_s','?')}s")
     lines.append(f"│ log     : {Path(path).name}   records: {len(records)}")
     integrity = "OK intact (tamper-evident chain verified)" if ok else f"!! BROKEN - {verify_msg}"
@@ -84,6 +108,13 @@ def build_report(path: str | Path) -> str:
             lines.append(f"  · {kind:<12} {detail}")
         lines.append("")
 
+    if degraded:
+        if meta["exit"].get("not_started"):
+            lines.append("⚠  Enforcement was unavailable; Warden failed closed and did not "
+                         "start the child.")
+        else:
+            lines.append("⚠  Enforcement was unavailable; this session used explicit "
+                         "proxy-only fallback.")
     if net_block:
         lines.append("⚠  Warden blocked "
                      f"{len(_dedupe(net_block))} undisclosed egress destination(s). "
@@ -91,7 +122,7 @@ def build_report(path: str | Path) -> str:
     elif net_warn:
         lines.append(f"⚠  Monitor mode: {len(_dedupe(net_warn))} unlisted destination(s) were "
                      "let through and recorded. Switch on_violation to 'block+receipt' to block them.")
-    else:
+    elif not degraded or not meta["exit"].get("not_started"):
         lines.append("No undisclosed egress. All network activity was to allow-listed hosts.")
 
     return "\n".join(lines)

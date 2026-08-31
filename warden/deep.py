@@ -244,6 +244,77 @@ class DeepRecorder:
         return {"events": dict(self.counts), "tracked_pids": len(self.tracker.pids)}
 
 
+class DeepStream:
+    """Capture eslogger events starting BEFORE the child launches, so the child's
+    very first fork/exec (which happen while eslogger is still ~1s from ready if
+    started after) are not missed. Raw lines are buffered until the child's pid
+    is known via attach(); then the buffer is replayed through a DeepRecorder
+    (whose subtree tracker keeps only the child's events) and live lines follow.
+
+    Only the LiveCapture subprocess is live-only (needs sudo + Full Disk Access);
+    the buffer/attach logic is unit-tested.
+    """
+
+    MAX_BUFFER = 20000  # cap so the pre-attach window can't grow unbounded
+
+    def __init__(self, recorder, events: list[str]):
+        import threading
+
+        self.recorder = recorder
+        self.events = events
+        self._lock = threading.Lock()
+        self._buffer: list[str] = []
+        self._dr: DeepRecorder | None = None
+        self._stop = threading.Event()
+        self._capture = None
+        self._thread = None
+        self.reason: str | None = None
+
+    def start(self) -> bool:
+        import threading
+
+        if not eslogger_available():
+            return False
+        self._thread = threading.Thread(target=self._reader, daemon=True)
+        self._thread.start()
+        return True
+
+    def _reader(self):
+        try:
+            self._capture = LiveCapture(self.events)
+            for line in self._capture.lines():
+                if self._stop.is_set():
+                    break
+                self._ingest(line)
+        except Exception as exc:  # FDA denied, sudo failed — non-fatal
+            self.reason = str(exc)[:200]
+
+    def _ingest(self, line: str):
+        with self._lock:
+            if self._dr is None:
+                if len(self._buffer) < self.MAX_BUFFER:
+                    self._buffer.append(line)
+            else:
+                self._dr.feed_line(line)
+
+    def attach(self, root_pid: int):
+        """Child pid is now known: create the recorder, replay the buffered
+        pre-launch window, then feed live lines through it."""
+        with self._lock:
+            self._dr = DeepRecorder(self.recorder, root_pid)
+            for line in self._buffer:
+                self._dr.feed_line(line)
+            self._buffer.clear()
+
+    def finish(self) -> dict:
+        self._stop.set()
+        if self._capture:
+            self.reason = self._capture.stop()
+        summary = self._dr.summary() if self._dr else {"events": {}, "tracked_pids": 0}
+        summary["buffered_replayed"] = self._dr is not None
+        return summary
+
+
 def eslogger_available() -> bool:
     return shutil.which("eslogger") is not None
 

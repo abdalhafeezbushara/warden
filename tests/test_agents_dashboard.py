@@ -6,7 +6,10 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,7 +40,8 @@ class AgentRegistry(unittest.TestCase):
 
     def test_describe_all_shape(self):
         rows = agents.describe_all()
-        self.assertTrue(all("installed" in r and "egress_count" in r for r in rows))
+        self.assertTrue(all("installed" in r and "egress_count" in r and
+                            "env_key_count" in r for r in rows))
 
 
 class SessionsAndDashboard(unittest.TestCase):
@@ -53,6 +57,8 @@ class SessionsAndDashboard(unittest.TestCase):
         log = self.home / "sessions" / "20260101-000000.log"
         rec = Recorder(log)
         rec.start({"argv": ["sh", "x.sh"], "agent": "claude", "policy": "demo", "enforce": True})
+        rec.emit("policy.compiled", {"backend": "seatbelt"})
+        rec.emit("env.scrubbed", {"count": 3, "names": ["GITHUB_TOKEN", "DB_PASSWORD", "AWS_PROFILE"]})
         rec.emit("net.connect", {"host": "example.com", "port": 443, "verdict": "allow"})
         rec.emit("net.connect", {"host": "evil.example.com", "port": 443, "verdict": "deny"})
         rec.emit("child.exit", {"code": 0, "duration_s": 0.1})
@@ -69,6 +75,9 @@ class SessionsAndDashboard(unittest.TestCase):
         self.assertEqual(s["allowed_count"], 1)
         self.assertEqual(s["blocked_count"], 1)
         self.assertEqual([b["host"] for b in s["blocked"]], ["evil.example.com"])
+        self.assertEqual(s["status"], "completed")
+        self.assertEqual(s["backend"], "seatbelt")
+        self.assertEqual(s["env_scrubbed"]["count"], 3)
         self.assertTrue(s["integrity_ok"])
 
     def test_overview(self):
@@ -77,6 +86,40 @@ class SessionsAndDashboard(unittest.TestCase):
         self.assertEqual(o["blocked_total"], 1)
         self.assertEqual(o["agents"], {"claude": 1})
         self.assertEqual(o["top_blocked"][0][0], "evil.example.com")
+        self.assertEqual(o["degraded_sessions"], 0)
+        self.assertEqual(o["recent"][0]["status"], "completed")
+
+    def test_dashboard_security_headers_and_host_guard(self):
+        from warden.dashserver import DashboardServer
+
+        server = DashboardServer()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urllib.request.urlopen(server.url + "api/capabilities") as response:
+                payload = json.load(response)
+                self.assertIn("backend", payload)
+                self.assertTrue(payload["behavioral_integrity"])
+                self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+                self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+
+            with urllib.request.urlopen(server.url + "api/behavior") as response:
+                behavior = json.load(response)
+                self.assertEqual(behavior["coverage"]["subjects"], 1)
+                self.assertEqual(behavior["coverage"]["unapproved"], 1)
+
+            with urllib.request.urlopen(server.url + "api/session/20260101-000000") as response:
+                detail = json.load(response)
+                self.assertEqual(detail["behavior"]["schema"], "warden.behavior/v1")
+                self.assertIsNone(detail["behavior_diff"])
+
+            spoofed = urllib.request.Request(server.url, headers={"Host": "attacker.example"})
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.urlopen(spoofed)
+            self.assertEqual(raised.exception.code, 421)
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

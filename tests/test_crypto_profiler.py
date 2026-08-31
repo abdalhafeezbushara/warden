@@ -70,12 +70,20 @@ class KeyManagement(unittest.TestCase):
 class PolicySerialization(unittest.TestCase):
     def test_yaml_roundtrip(self):
         pol = P.default_policy("/tmp/proj")
+        pol.strict_fs = True
+        pol.strict_read = True
+        pol.env_allow = ["MY_PROJECT_TOKEN"]
+        pol.network.allow_private = True
         text = P.to_yaml(pol)
         back = P.loads(text)
         self.assertEqual(back.network.allow, pol.network.allow)
         self.assertEqual(back.filesystem.deny, pol.filesystem.deny)
         self.assertEqual(back.process.deny, pol.process.deny)
         self.assertEqual(back.network.deny_all_other, pol.network.deny_all_other)
+        self.assertEqual(back.network.allow_private, pol.network.allow_private)
+        self.assertEqual(back.strict_fs, pol.strict_fs)
+        self.assertEqual(back.strict_read, pol.strict_read)
+        self.assertEqual(back.env_allow, pol.env_allow)
 
 
 class ProfilerClassification(unittest.TestCase):

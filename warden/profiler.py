@@ -5,11 +5,11 @@ what a skill *does* at runtime (a 2026 result showed >90% evasion). Warden's
 answer is behavioral: run the skill once under Warden, observe exactly which
 hosts it reaches, and emit a policy that allows precisely those and nothing else.
 
-Safety: by default profiling runs with filesystem protection ON (secrets denied
-by the sandbox) and egress CONTAINED — every host the skill tries to reach is
-recorded but not actually connected, so profiling an untrusted skill cannot
-leak. Pass allow_egress=True for a fuller run that lets connections through to
-reveal second-order hosts (use only for skills you already partly trust).
+Safety: by default profiling is time-boxed, confines filesystem reads and writes,
+and blocks egress — every attempted host is recorded but not connected. This is
+a host sandbox for semi-trusted skills, not a malware boundary; unknown code
+belongs in the disposable container harness under detonate/. Pass
+allow_egress=True only for code you partly trust when a fuller run is needed.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def classify_hosts(hosts: list[str]) -> tuple[list[str], list[str]]:
 def _profiling_policy(workdir: str, allow_egress: bool) -> Policy:
     return Policy(
         name="profiling",
-        description="Temporary profiling policy: fs protected, egress recorded.",
+        description="Temporary profiling policy: writes confined, egress recorded.",
         filesystem=FilesystemRules(
             read=[workdir + "/**", "~/.gitconfig"],
             write=[workdir + "/**", "/tmp/**", "/private/tmp/**"],
@@ -70,7 +70,17 @@ def _profiling_policy(workdir: str, allow_egress: bool) -> Policy:
                              deny_all_other=True),
         process=ProcessRules(deny=["ssh", "scp"]),
         on_violation="block+receipt",
+        # Confine writes to the work/tmp trees — a profiled skill can't scribble
+        # across the host. For fully untrusted skills use the container
+        # detonation harness (detonate/); `warden profile` is host-based and
+        # suited to semi-trusted skills.
+        strict_fs=True,
+        strict_read=True,
     )
+
+
+# Time-box a profiling run so a hanging or fork-bombing skill can't run forever.
+PROFILE_TIMEOUT_S = 60
 
 
 def profile(argv: list[str], *, agent: str | None = None, allow_egress: bool = False,
@@ -90,7 +100,8 @@ def profile(argv: list[str], *, agent: str | None = None, allow_egress: bool = F
 
     stamp = "profile-" + time.strftime("%Y%m%d-%H%M%S")
     pol = _profiling_policy(workdir, allow_egress)
-    code = run(argv, pol, enforce=True, session=stamp, agent=agent)
+    code = run(argv, pol, enforce=True, session=stamp, agent=agent,
+               timeout=PROFILE_TIMEOUT_S)
 
     summary = sessions.summarize(stamp)
     hosts = sorted({e["host"] for e in summary["allowed"]} |

@@ -7,6 +7,7 @@ CI on Linux and by `warden doctor` there.
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -82,6 +83,11 @@ class BwrapGeneration(unittest.TestCase):
         # strict mode binds /usr read-only rather than the whole root
         self.assertIn("--ro-bind /usr /usr", joined)
         self.assertNotIn("--ro-bind / /", joined)
+
+    def test_strict_read_hides_home(self):
+        cmd = _cmd(strict_read=True)
+        tmpfs_targets = [cmd[i + 1] for i, item in enumerate(cmd[:-1]) if item == "--tmpfs"]
+        self.assertIn(os.path.realpath(os.path.expanduser("~")), tmpfs_targets)
 
     def test_command_ends_with_argv(self):
         cmd = _cmd()
